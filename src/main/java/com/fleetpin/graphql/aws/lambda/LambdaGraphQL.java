@@ -57,7 +57,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
 					return CompletableFuture.completedFuture((ExecutionResult) null);
 				}
 
-				C graphContext = buildContext(query.getVariables(), user, query);
+				C graphContext = buildContext(user, query);
 				var target = build.executeAsync(builder -> builder.query(query.getQuery()).operationName(query.getOperationName()).variables(query.getVariables()).context(graphContext));
 				graphContext.start(target);
 				return target;
@@ -94,7 +94,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
 
 	protected abstract CompletableFuture<U> validate(String authHeader);
 
-	protected abstract C buildContext(Map<String, Object> variables, U user, GraphQLQuery query);
+	protected abstract C buildContext(U user, GraphQLQuery query);
 
 }
 
