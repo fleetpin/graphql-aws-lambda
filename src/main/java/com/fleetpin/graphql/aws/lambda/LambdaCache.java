@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class LambdaCache<K, V> {
 
@@ -31,7 +32,9 @@ public class LambdaCache<K, V> {
 	public V get(K key) {
 		return map.computeIfAbsent(key, this::build).value;
 	}
-	
+	public V get(K key, Supplier<V> consumer) {
+		return map.computeIfAbsent(key, __ -> new CacheWrapper<V>(Instant.now(), consumer.get())).value;
+	}	
 	
 	public static void evict() {
 		var now = Instant.now();
@@ -50,9 +53,6 @@ public class LambdaCache<K, V> {
 				}
 			}
 		}
-		entries.forEach(e -> {
-			
-		});
 	}
 
 	private static class CacheWrapper<V> {

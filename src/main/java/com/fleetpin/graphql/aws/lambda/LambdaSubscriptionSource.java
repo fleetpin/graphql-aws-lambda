@@ -89,17 +89,6 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 	protected abstract GraphQL buildGraphQL() throws Exception;
 	protected abstract DynamoDbManager builderManager();
 	
-	
-	@Override
-	public final Void handleRequest(E input, Context context) {
-		try {
-			return handle(input, context);
-		}finally {
-			LambdaCache.evict();
-		}
-	}
-	
-	protected abstract Void handle(E input, Context context);
 
 	public abstract CompletableFuture<ContextGraphQL> buildContext(Flowable<T> publisher, String userId, AttributeValue additionalUserInfo, Map<String, Object> variables);
 	public abstract String buildSubscriptionId(T type);
