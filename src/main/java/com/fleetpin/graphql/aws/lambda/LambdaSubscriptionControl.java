@@ -107,6 +107,8 @@ public abstract class LambdaSubscriptionControl<U> implements RequestHandler<API
 
 		}catch (Exception e) {
 			throw new RuntimeException(e);
+		}finally {
+			LambdaCache.evict();
 		}
 	}
 

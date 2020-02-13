@@ -15,26 +15,24 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
+import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseData;
 import com.fleetpin.graphql.dynamodb.manager.DynamoDbManager;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 
 import graphql.ExecutionResult;
 import graphql.GraphQL;
@@ -52,8 +50,8 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 	private final GraphQL graph;
 
 	
-	private final LoadingCache<String, CompletableFuture<GetItemResponse>> userCache;
-	private final LoadingCache<String, CompletableFuture<QueryResponse>> organisationCache;
+	private final LambdaCache<String, CompletableFuture<GetItemResponse>> userCache;
+	private final LambdaCache<String, CompletableFuture<QueryResponse>> organisationCache;
 	
 	
 
@@ -69,29 +67,21 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 		}
 		
 		//TODO: make configurable
-		organisationCache = CacheBuilder.newBuilder().expireAfterWrite(20, TimeUnit.SECONDS).build(new CacheLoader<String, CompletableFuture<QueryResponse>>(){
-
-			@Override
-			public CompletableFuture<QueryResponse> load(String lookupId) throws Exception {
-				Map<String, AttributeValue> keyConditions = new HashMap<>();
-				keyConditions.put(":subscription", AttributeValue.builder().s(subscriptionId + ":" + lookupId).build());
-				return manager.getDynamoDbAsyncClient().query(t -> t.tableName(subscriptionTable).indexName("subscription").keyConditionExpression("subscription = :subscription").expressionAttributeValues(keyConditions));	
-			}
+		organisationCache = new LambdaCache<>(Duration.ofMinutes(2), lookupId -> {
+			Map<String, AttributeValue> keyConditions = new HashMap<>();
+			keyConditions.put(":subscription", AttributeValue.builder().s(subscriptionId + ":" + lookupId).build());
+			return manager.getDynamoDbAsyncClient().query(t -> t.tableName(subscriptionTable).indexName("subscription").keyConditionExpression("subscription = :subscription").expressionAttributeValues(keyConditions));	
+				
 		});
 
 
-		userCache = CacheBuilder.newBuilder().expireAfterWrite(20, TimeUnit.SECONDS).build(new CacheLoader<String, CompletableFuture<GetItemResponse>>(){
 
-			@Override
-			public CompletableFuture<GetItemResponse> load(String connectionId) throws Exception {
-				Map<String, AttributeValue> key = new HashMap<>();
-				key.put("connectionId", AttributeValue.builder().s(connectionId).build());
-				key.put("id", AttributeValue.builder().s("auth").build());
-				return manager.getDynamoDbAsyncClient().getItem(t -> t.tableName(subscriptionTable).key(key));
-
-			}
-
-		});
+		userCache = new LambdaCache<>(Duration.ofSeconds(20), connectionId -> {
+    		Map<String, AttributeValue> key = new HashMap<>();
+    		key.put("connectionId", AttributeValue.builder().s(connectionId).build());
+    		key.put("id", AttributeValue.builder().s("auth").build());
+    		return manager.getDynamoDbAsyncClient().getItem(t -> t.tableName(subscriptionTable).key(key));
+		});					
 		
 	}
 
@@ -99,6 +89,18 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 	protected abstract GraphQL buildGraphQL() throws Exception;
 	protected abstract DynamoDbManager builderManager();
 	
+	
+	@Override
+	public final Void handleRequest(E input, Context context) {
+		try {
+			return handle(input, context);
+		}finally {
+			LambdaCache.evict();
+		}
+	}
+	
+	protected abstract Void handle(E input, Context context);
+
 	public abstract CompletableFuture<ContextGraphQL> buildContext(Flowable<T> publisher, String userId, AttributeValue additionalUserInfo, Map<String, Object> variables);
 	public abstract String buildSubscriptionId(T type);
 	
@@ -108,7 +110,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 
 
 
-		return organisationCache.getUnchecked(buildSubscriptionId(t)).thenCompose(items -> {
+		return organisationCache.get(buildSubscriptionId(t)).thenCompose(items -> {
 			List<CompletableFuture<Void>> parts = new ArrayList<>();
 			for(var item: items.items()) {
 				String connectionId = item.get("connectionId").s();
@@ -124,7 +126,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 
 
 	private CompletableFuture<Void> processUpdate(String connectionId, String id, GraphQLQuery query, T t) {
-		return userCache.getUnchecked(connectionId).thenCompose(user -> {
+		return userCache.get(connectionId).thenCompose(user -> {
 			if(user.item() == null || user.item().isEmpty()) {
 				//not authenticated
 				return CompletableFuture.completedFuture(null);

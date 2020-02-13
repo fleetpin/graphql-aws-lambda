@@ -83,6 +83,8 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
 			LOGGER.error("Failed to invoke graph", e);
 			e.printStackTrace();
 			throw new RuntimeException(e);
+		}finally {
+			LambdaCache.evict();
 		}
 	}
 
