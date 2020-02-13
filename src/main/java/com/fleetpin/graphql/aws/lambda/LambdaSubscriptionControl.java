@@ -88,7 +88,7 @@ public abstract class LambdaSubscriptionControl<U> implements RequestHandler<API
 				for(var item: items) {
 					var key = new HashMap<>(item);
 					key.keySet().retainAll(Arrays.asList("connectionId", "id"));
-					manager.getDynamoDbAsyncClient().deleteItem(t -> t.tableName(subscriptionTable).key(key));
+					manager.getDynamoDbAsyncClient().deleteItem(t -> t.tableName(subscriptionTable).key(key)).get();
 				}
 				break;
 
