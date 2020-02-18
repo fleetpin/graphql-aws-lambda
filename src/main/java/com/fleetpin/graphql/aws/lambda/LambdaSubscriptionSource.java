@@ -17,6 +17,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,10 +25,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
 
-import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseData;
@@ -38,7 +36,9 @@ import graphql.ExecutionResult;
 import graphql.GraphQL;
 import io.reactivex.rxjava3.core.Flowable;
 import software.amazon.awssdk.core.SdkBytes;
-import software.amazon.awssdk.services.apigatewaymanagementapi.ApiGatewayManagementApiClient;
+import software.amazon.awssdk.services.apigatewaymanagementapi.ApiGatewayManagementApiAsyncClient;
+import software.amazon.awssdk.services.apigatewaymanagementapi.model.GoneException;
+import software.amazon.awssdk.services.apigatewaymanagementapi.model.PostToConnectionResponse;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
@@ -46,24 +46,26 @@ import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E, Void>{
 
 	private final DynamoDbManager manager;
-	private final ApiGatewayManagementApiClient gatewayApi;
+	private final ApiGatewayManagementApiAsyncClient gatewayApi;
 	private final GraphQL graph;
 
 	
 	private final LambdaCache<String, CompletableFuture<GetItemResponse>> userCache;
 	private final LambdaCache<String, CompletableFuture<QueryResponse>> organisationCache;
+	private final String subscriptionTable;
 	
 	
 
 	public LambdaSubscriptionSource(String subscriptionId, String subscriptionTable, String apiUri) throws Exception {
 		prepare();
+		this.subscriptionTable = subscriptionTable;
 		this.manager = builderManager();
 		this.graph = buildGraphQL();
 		if(apiUri ==null) {
 			gatewayApi = null;
 		}else {
 			URI endpoint = new URI(apiUri);
-			this.gatewayApi = ApiGatewayManagementApiClient.builder().endpointOverride(endpoint).build();
+			this.gatewayApi = ApiGatewayManagementApiAsyncClient.builder().endpointOverride(endpoint).build();
 		}
 		
 		//TODO: make configurable
@@ -142,46 +144,25 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 					Publisher<ExecutionResult> stream = r.getData();
 					CompletableFuture<?> future = new CompletableFuture<>();
 					context.start(future); //TODO: seems slightly odd placement think should be lower
-					stream.subscribe(new Subscriber<ExecutionResult>() {
-
-						private Subscription s;
-
-						@Override
-						public void onSubscribe(Subscription s) {
-							this.s = s;
-							s.request(1);
-						}
-
-						@Override
-						public void onNext(ExecutionResult t) {
-							try {
-								SubscriptionResponseData data = new SubscriptionResponseData(id, t);
-								String sendResponse = manager.getMapper().writeValueAsString(data);
-								sendMessage(connectionId, sendResponse);
-							} catch (JsonProcessingException e) {
-								throw new UncheckedIOException(e);
-							}
-							s.request(1);
-
-						}
-
-						@Override
-						public void onError(Throwable t) {
-							t.printStackTrace();
-							future.completeExceptionally(t);
-
-						}
-
-						@Override
-						public void onComplete() {
+					var item = Flowable.fromPublisher(stream).blockingFirst();
+					SubscriptionResponseData data = new SubscriptionResponseData(id, item);
+					try {
+						String sendResponse = manager.getMapper().writeValueAsString(data);
+						return sendMessage(connectionId, sendResponse).handle((response, error) -> {
 							future.complete(null);
-
-						}
-					});
-					return future;
+							if(error != null) {
+								if(error instanceof GoneException || error.getCause() instanceof GoneException) {
+									//delete user info
+									return deleteUser(user);
+								}
+							}
+							return future;
+						}).thenCompose(promise -> promise).thenApply(__ -> null);
+					} catch (JsonProcessingException e) {
+						throw new UncheckedIOException(e);
+					}
 				});
-
-			}).thenApply(__ -> null);
+			});
 
 		});
 
@@ -190,9 +171,28 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 	}
 
 
+	private CompletableFuture<Void> deleteUser(GetItemResponse user) {
+		Map<String, AttributeValue> keyConditions = new HashMap<>();
+		keyConditions.put(":connectionId", user.item().get("connectionId"));
+
+		return manager.getDynamoDbAsyncClient().query(t -> t.tableName(subscriptionTable)
+				.keyConditionExpression("connectionId = :connectionId").expressionAttributeValues(keyConditions))
+				.thenCompose(items -> {
+					
+					var futures = items.items().stream().map(item -> {
+						var key = new HashMap<>(item);
+						key.keySet().retainAll(Arrays.asList("connectionId", "id"));
+						return manager.getDynamoDbAsyncClient().deleteItem(t -> t.tableName(subscriptionTable).key(key));
+					}).toArray(CompletableFuture[]::new);
+					return CompletableFuture.allOf(futures);
+				});
+
+		
+	}
+
 	@VisibleForTesting
-	protected void sendMessage(String connectionId, String sendResponse) {
-		gatewayApi.postToConnection(b -> b.connectionId(connectionId).data(SdkBytes.fromString(sendResponse , StandardCharsets.UTF_8)));
+	protected CompletableFuture<PostToConnectionResponse> sendMessage(String connectionId, String sendResponse) {
+		return gatewayApi.postToConnection(b -> b.connectionId(connectionId).data(SdkBytes.fromString(sendResponse , StandardCharsets.UTF_8)));
 	}
 
 
