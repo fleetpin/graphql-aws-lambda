@@ -11,7 +11,6 @@
  */
 package com.fleetpin.graphql.aws.lambda;
 
-import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +21,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import org.reactivestreams.Publisher;
 
@@ -54,8 +52,6 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 	private final LambdaCache<String, CompletableFuture<QueryResponse>> organisationCache;
 	private final String subscriptionTable;
 	
-	
-
 	public LambdaSubscriptionSource(String subscriptionId, String subscriptionTable, String apiUri) throws Exception {
 		prepare();
 		this.subscriptionTable = subscriptionTable;
@@ -69,7 +65,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 		}
 		
 		//TODO: make configurable
-		organisationCache = new LambdaCache<>(Duration.ofMinutes(2), lookupId -> {
+		organisationCache = new LambdaCache<>(Duration.ofSeconds(20), lookupId -> {
 			Map<String, AttributeValue> keyConditions = new HashMap<>();
 			keyConditions.put(":subscription", AttributeValue.builder().s(subscriptionId + ":" + lookupId).build());
 			return manager.getDynamoDbAsyncClient().query(t -> t.tableName(subscriptionTable).indexName("subscription").keyConditionExpression("subscription = :subscription").expressionAttributeValues(keyConditions));	
@@ -97,8 +93,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 	
 
 	@VisibleForTesting
-	protected CompletableFuture<?> process(T t) throws InterruptedException, ExecutionException, IOException {
-
+	protected CompletableFuture<?> process(T t) {
 
 
 		return organisationCache.get(buildSubscriptionId(t)).thenCompose(items -> {
@@ -122,8 +117,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 				//not authenticated
 				return CompletableFuture.completedFuture(null);
 			}
-			Flowable<T> publisher = Flowable.fromCallable(() -> t);
-
+			Flowable<T> publisher = Flowable.just(t);
 
 			return buildContext(publisher, user.item().get("user").s(), user.item().get("aditional"), query.getVariables()).thenCompose(context -> {
 				CompletableFuture<ExecutionResult> toReturn = graph.executeAsync(builder -> builder.query(query.getQuery()).operationName(query.getOperationName()).variables(query.getVariables()).context(context));
@@ -133,34 +127,35 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 						try {
 							SubscriptionResponseData data = new SubscriptionResponseData(id, r);
 							String sendResponse = manager.getMapper().writeValueAsString(data);
-							sendMessage(connectionId, sendResponse);
+							return sendMessage(connectionId, sendResponse).thenAccept(__ -> {});
 						} catch (JsonProcessingException e) {
 							throw new UncheckedIOException(e);
 						}
-
-
-						return CompletableFuture.completedFuture(null);
 					}
 					Publisher<ExecutionResult> stream = r.getData();
-					CompletableFuture<?> future = new CompletableFuture<>();
+					CompletableFuture<Void> future = new CompletableFuture<>();
 					context.start(future); //TODO: seems slightly odd placement think should be lower
-					var item = Flowable.fromPublisher(stream).blockingFirst();
-					SubscriptionResponseData data = new SubscriptionResponseData(id, item);
-					try {
-						String sendResponse = manager.getMapper().writeValueAsString(data);
-						return sendMessage(connectionId, sendResponse).handle((response, error) -> {
-							future.complete(null);
-							if(error != null) {
-								if(error instanceof GoneException || error.getCause() instanceof GoneException) {
-									//delete user info
-									return deleteUser(user);
+					return Flowable.fromPublisher(stream).map(item -> {
+						SubscriptionResponseData data = new SubscriptionResponseData(id, item);
+						try {
+							String sendResponse = manager.getMapper().writeValueAsString(data);
+							return sendMessage(connectionId, sendResponse).handle((response, error) -> {
+								future.complete(null);
+								if(error != null) {
+									if(error instanceof GoneException || error.getCause() instanceof GoneException) {
+										//delete user info
+										return deleteUser(user);
+									}else {
+										throw new RuntimeException(error);
+									}
 								}
-							}
-							return future;
-						}).thenCompose(promise -> promise).thenApply(__ -> null);
-					} catch (JsonProcessingException e) {
-						throw new UncheckedIOException(e);
-					}
+								return future;
+							}).thenCompose(promise -> promise).thenAccept(__ -> {});
+						} catch (JsonProcessingException e) {
+							throw new UncheckedIOException(e);
+						}
+					}).singleElement().toCompletionStage(CompletableFuture.completedFuture(null)).thenCompose(f -> f).thenAccept(__ -> {});
+					
 				});
 			});
 
