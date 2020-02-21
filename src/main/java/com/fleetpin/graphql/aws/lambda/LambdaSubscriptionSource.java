@@ -52,7 +52,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 	private final LambdaCache<String, CompletableFuture<QueryResponse>> organisationCache;
 	private final String subscriptionTable;
 	
-	public LambdaSubscriptionSource(String subscriptionId, String subscriptionTable, String apiUri) throws Exception {
+	public LambdaSubscriptionSource(String subscriptionId, String subscriptionTable, String apiUri, Duration userCacheTTL, Duration subscriptionCacheTTL) throws Exception {
 		prepare();
 		this.subscriptionTable = subscriptionTable;
 		this.manager = builderManager();
@@ -65,7 +65,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 		}
 		
 		//TODO: make configurable
-		organisationCache = new LambdaCache<>(Duration.ofSeconds(20), lookupId -> {
+		organisationCache = new LambdaCache<>(subscriptionCacheTTL, lookupId -> {
 			Map<String, AttributeValue> keyConditions = new HashMap<>();
 			keyConditions.put(":subscription", AttributeValue.builder().s(subscriptionId + ":" + lookupId).build());
 			return manager.getDynamoDbAsyncClient().query(t -> t.tableName(subscriptionTable).indexName("subscription").keyConditionExpression("subscription = :subscription").expressionAttributeValues(keyConditions));	
@@ -74,7 +74,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 
 
 
-		userCache = new LambdaCache<>(Duration.ofSeconds(20), connectionId -> {
+		userCache = new LambdaCache<>(userCacheTTL, connectionId -> {
     		Map<String, AttributeValue> key = new HashMap<>();
     		key.put("connectionId", AttributeValue.builder().s(connectionId).build());
     		key.put("id", AttributeValue.builder().s("auth").build());
