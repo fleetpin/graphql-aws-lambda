@@ -149,15 +149,21 @@ public abstract class LambdaSubscriptionControl<U> implements RequestHandler<API
 			try {
 				GraphQLQuery query = ((SubscriptionStart) graphQuery).getPayload();
 				ExecutionResult result = graph.execute(builder -> builder.query(query.getQuery()).operationName(query.getOperationName()).variables(query.getVariables()));
-				String subscription = result.getData();
-				subscription = mapName(subscription);
-				Map<String, AttributeValue> item = new HashMap<>();
-				item.put("connectionId", AttributeValue.builder().s(connectionId).build());
-				item.put("id", AttributeValue.builder().s(graphQuery.getId()).build());
-				item.put("subscription", AttributeValue.builder().s(subscription + ":" + buildSubscriptionId(subscription, query.getVariables())).build());
-				item.put("query", manager.toAttributes(query));
-				item.put("ttl", AttributeValue.builder().n(Long.toString(Instant.now().plus(7, ChronoUnit.DAYS).toEpochMilli())).build()); //if connection still there in a week just delete
-				manager.getDynamoDbAsyncClient().putItem(t -> t.tableName(subscriptionTable).item(item)).get();
+				if(!result.getErrors().isEmpty()) {
+					GraphQLError error = result.getErrors().get(0); // might hide other errors but can then be worked through
+					String response = manager.getMapper().writeValueAsString(new SubscriptionResponseError(graphQuery.getId(), error));
+					sendMessage(connectionId, response);
+				}else {
+					String subscription = result.getData();
+					subscription = mapName(subscription);
+					Map<String, AttributeValue> item = new HashMap<>();
+					item.put("connectionId", AttributeValue.builder().s(connectionId).build());
+					item.put("id", AttributeValue.builder().s(graphQuery.getId()).build());
+					item.put("subscription", AttributeValue.builder().s(subscription + ":" + buildSubscriptionId(subscription, query.getVariables())).build());
+					item.put("query", manager.toAttributes(query));
+					item.put("ttl", AttributeValue.builder().n(Long.toString(Instant.now().plus(7, ChronoUnit.DAYS).toEpochMilli())).build()); //if connection still there in a week just delete
+					manager.getDynamoDbAsyncClient().putItem(t -> t.tableName(subscriptionTable).item(item)).get();
+				}
 			} catch (Exception e) {
 				GraphQLError error = GraphqlErrorBuilder.newError().message(e.getMessage()).build();
 				String response = manager.getMapper().writeValueAsString(new SubscriptionResponseError(graphQuery.getId(), error));
