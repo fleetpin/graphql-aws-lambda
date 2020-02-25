@@ -21,13 +21,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 import org.reactivestreams.Publisher;
 
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseData;
-import com.fleetpin.graphql.dynamodb.manager.DynamoDbManager;
+import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.google.common.annotations.VisibleForTesting;
 
 import graphql.ExecutionResult;
@@ -133,14 +134,11 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 						}
 					}
 					Publisher<ExecutionResult> stream = r.getData();
-					CompletableFuture<Void> future = new CompletableFuture<>();
-					context.start(future); //TODO: seems slightly odd placement think should be lower
-					return Flowable.fromPublisher(stream).map(item -> {
+					CompletionStage<Void> requestSent =  Flowable.fromPublisher(stream).map(item -> {
 						SubscriptionResponseData data = new SubscriptionResponseData(id, item);
 						try {
 							String sendResponse = manager.getMapper().writeValueAsString(data);
 							return sendMessage(connectionId, sendResponse).handle((response, error) -> {
-								future.complete(null);
 								if(error != null) {
 									if(error instanceof GoneException || error.getCause() instanceof GoneException) {
 										//delete user info
@@ -149,12 +147,16 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 										throw new RuntimeException(error);
 									}
 								}
-								return future;
+								return CompletableFuture.completedFuture(null);
 							}).thenCompose(promise -> promise).thenAccept(__ -> {});
 						} catch (JsonProcessingException e) {
 							throw new UncheckedIOException(e);
 						}
 					}).singleElement().toCompletionStage(CompletableFuture.completedFuture(null)).thenCompose(f -> f).thenAccept(__ -> {});
+					
+					context.start(requestSent);
+					return requestSent;
+
 					
 				});
 			});

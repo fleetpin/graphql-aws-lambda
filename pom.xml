@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.fleetpin</groupId>
 	<artifactId>graphql-aws-lambda</artifactId>
-	<version>0.1.15</version>
+	<version>0.1.17</version>
 	<name>graphQL AWS Lambda</name>
 	<description>library that allows you to use a lambda endpoint as a graphql API</description>
 	<url>https://github.com/fleetpin/graphql-aws-lambda</url>
@@ -84,8 +84,8 @@
 	<dependencies>
 		<dependency>
 			<groupId>com.fleetpin</groupId>
-			<artifactId>graphql-dynamodb-manager</artifactId>
-			<version>0.1.4</version>
+			<artifactId>graphql-database-manager-dynamo</artifactId>
+			<version>0.2.0</version>
 		</dependency>
 		<dependency>
 			<groupId>com.fleetpin</groupId>

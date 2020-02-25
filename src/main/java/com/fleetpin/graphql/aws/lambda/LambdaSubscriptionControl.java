@@ -35,7 +35,7 @@ import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionStart;
 import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionStop;
 import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionTerminate;
 import com.fleetpin.graphql.aws.lambda.subscription.WebsocketMessage;
-import com.fleetpin.graphql.dynamodb.manager.DynamoDbManager;
+import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.google.common.annotations.VisibleForTesting;
 
 import graphql.ExecutionResult;
