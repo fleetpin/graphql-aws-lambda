@@ -189,7 +189,9 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 
 	@VisibleForTesting
 	protected CompletableFuture<PostToConnectionResponse> sendMessage(String connectionId, String sendResponse) {
-		return gatewayApi.postToConnection(b -> b.connectionId(connectionId).data(SdkBytes.fromString(sendResponse , StandardCharsets.UTF_8)));
+		return gatewayApi.postToConnection(b -> b.overrideConfiguration(
+				c -> c.apiCallTimeout(Duration.ofSeconds(10)).apiCallAttemptTimeout(Duration.ofSeconds(10))
+		).connectionId(connectionId).data(SdkBytes.fromString(sendResponse, StandardCharsets.UTF_8)));
 	}
 
 
