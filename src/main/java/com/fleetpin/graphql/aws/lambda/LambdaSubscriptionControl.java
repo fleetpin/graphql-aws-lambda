@@ -11,65 +11,48 @@
  */
 package com.fleetpin.graphql.aws.lambda;
 
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyResponseEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionConnectionInit;
-import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseAccept;
-import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseConnectionError;
-import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseError;
-import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionStart;
-import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionStop;
-import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionTerminate;
-import com.fleetpin.graphql.aws.lambda.subscription.WebsocketMessage;
+import com.fleetpin.graphql.aws.lambda.admin.Admin;
+import com.fleetpin.graphql.aws.lambda.admin.User;
+import com.fleetpin.graphql.aws.lambda.subscription.*;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.google.common.annotations.VisibleForTesting;
-
-import graphql.ExecutionResult;
 import graphql.GraphQL;
 import graphql.GraphQL.Builder;
-import graphql.GraphQLError;
-import graphql.GraphqlErrorBuilder;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.apigatewaymanagementapi.ApiGatewayManagementApiClient;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-public abstract class LambdaSubscriptionControl<U> implements RequestHandler<APIGatewayV2ProxyRequestEvent, APIGatewayV2ProxyResponseEvent>{
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
+public abstract class LambdaSubscriptionControl<U extends User> implements RequestHandler<APIGatewayV2ProxyRequestEvent, APIGatewayV2ProxyResponseEvent>{
 
 	private final ApiGatewayManagementApiClient gatewayApi;
-	private final GraphQL graph;
-	private final String subscriptionTable;
 	private final DynamoDbManager manager;
+	private final Admin<U> admin;
 
 	public LambdaSubscriptionControl(String subscriptionTable, String gatewayUri) throws Exception {
 		prepare();
 		this.manager = builderManager();
-		this.graph = buildGraphQL().subscriptionExecutionStrategy(new InterceptExecutionStrategy()).build();
-		this.subscriptionTable = subscriptionTable;
-		if(gatewayUri == null) {
+		final GraphQL graph = buildGraphQL().subscriptionExecutionStrategy(new InterceptExecutionStrategy()).build();
+
+		if (gatewayUri == null) {
 			gatewayApi = null;
-		}else {
+		} else {
 			URI endpoint = new URI(gatewayUri);
 			this.gatewayApi = ApiGatewayManagementApiClient.builder().endpointOverride(endpoint).build();
 		}
+
+		this.admin = new Admin<>(graph, subscriptionTable, manager, Long.parseLong(System.getenv("LAST_SEEN_TIMEOUT")));
 	}
-
-
-
 
 	@Override
 	public APIGatewayV2ProxyResponseEvent handleRequest(APIGatewayV2ProxyRequestEvent input, Context context) {
@@ -80,20 +63,11 @@ public abstract class LambdaSubscriptionControl<U> implements RequestHandler<API
 			}
 			case "DISCONNECT" :
 
-				Map<String, AttributeValue> keyConditions = new HashMap<>();
-				keyConditions.put(":connectionId", AttributeValue.builder().s(input.getRequestContext().getConnectionId()).build());
-
-				List<Map<String, AttributeValue>> items = manager.getDynamoDbAsyncClient().query(t -> t.tableName(subscriptionTable).keyConditionExpression("connectionId = :connectionId").expressionAttributeValues(keyConditions)).get().items();
-
-				for(var item: items) {
-					var key = new HashMap<>(item);
-					key.keySet().retainAll(Arrays.asList("connectionId", "id"));
-					manager.getDynamoDbAsyncClient().deleteItem(t -> t.tableName(subscriptionTable).key(key)).get();
-				}
+				disconnect(input);
 				break;
 
 			case "MESSAGE": 
-				WebsocketMessage<?> graphQuery = manager.getMapper().readValue(input.getBody(), WebsocketMessage.class);
+				SubscriptionMessage<?> graphQuery = manager.getMapper().readValue(input.getBody(), SubscriptionMessage.class);
 				process(input.getRequestContext().getConnectionId(), graphQuery);
 				break;
 
@@ -112,90 +86,45 @@ public abstract class LambdaSubscriptionControl<U> implements RequestHandler<API
 		}
 	}
 
-
-
-	@VisibleForTesting
-	public void process(String connectionId, WebsocketMessage<?> graphQuery) throws JsonProcessingException, InterruptedException, ExecutionException {
-		if(graphQuery instanceof SubscriptionConnectionInit) {
-			String response = "";
-			try {
-				String authHeader = ((SubscriptionConnectionInit) graphQuery).getPayload().getAuthorization();
-				CompletableFuture<U> userContext = validateUser(authHeader);
-				U user = userContext.get();
-				if(user != null) {
-					Map<String, AttributeValue> item = new HashMap<>();
-					item.put("connectionId", AttributeValue.builder().s(connectionId).build());
-					item.put("id", AttributeValue.builder().s("auth").build());
-					item.put("user", AttributeValue.builder().s(extractUserId(user)).build());
-
-					var additional = extraUserInfo(user);
-					if(additional != null) {
-						item.put("aditional", additional);
-					}
-					item.put("ttl", AttributeValue.builder().n(Long.toString(Instant.now().plus(7, ChronoUnit.DAYS).toEpochMilli())).build()); //if connection still there in a week just delete
-					manager.getDynamoDbAsyncClient().putItem(t -> t.tableName(subscriptionTable).item(item)).get();
-					response = manager.getMapper().writeValueAsString(new SubscriptionResponseAccept());
-				}else {
-					response = manager.getMapper().writeValueAsString(new SubscriptionResponseConnectionError("No token"));
-				}
-			} catch (Exception e) {
-				e.printStackTrace();
-				response = manager.getMapper().writeValueAsString(new SubscriptionResponseConnectionError(e.getMessage()));
-			}
-			final String sendResponse = response;
-			sendMessage(connectionId,sendResponse);
-
-		}else if(graphQuery instanceof SubscriptionStart) {
-			try {
-				GraphQLQuery query = ((SubscriptionStart) graphQuery).getPayload();
-				ExecutionResult result = graph.execute(builder -> builder.query(query.getQuery()).operationName(query.getOperationName()).variables(query.getVariables()));
-				if(!result.getErrors().isEmpty()) {
-					GraphQLError error = result.getErrors().get(0); // might hide other errors but can then be worked through
-					String response = manager.getMapper().writeValueAsString(new SubscriptionResponseError(graphQuery.getId(), error));
-					sendMessage(connectionId, response);
-				}else {
-					String subscription = result.getData();
-					subscription = mapName(subscription);
-					Map<String, AttributeValue> item = new HashMap<>();
-					item.put("connectionId", AttributeValue.builder().s(connectionId).build());
-					item.put("id", AttributeValue.builder().s(graphQuery.getId()).build());
-					item.put("subscription", AttributeValue.builder().s(subscription + ":" + buildSubscriptionId(subscription, query.getVariables())).build());
-					item.put("query", manager.toAttributes(query));
-					item.put("ttl", AttributeValue.builder().n(Long.toString(Instant.now().plus(7, ChronoUnit.DAYS).toEpochMilli())).build()); //if connection still there in a week just delete
-					manager.getDynamoDbAsyncClient().putItem(t -> t.tableName(subscriptionTable).item(item)).get();
-				}
-			} catch (Exception e) {
-				GraphQLError error = GraphqlErrorBuilder.newError().message(e.getMessage()).build();
-				String response = manager.getMapper().writeValueAsString(new SubscriptionResponseError(graphQuery.getId(), error));
-				sendMessage(connectionId, response);
-
-			}
-
-		}else if(graphQuery instanceof SubscriptionStop) {
-			Map<String, AttributeValue> item = new HashMap<>();
-			item.put("connectionId", AttributeValue.builder().s(connectionId).build());
-			item.put("id", AttributeValue.builder().s(graphQuery.getId()).build());
-			manager.getDynamoDbAsyncClient().deleteItem(t -> t.tableName(subscriptionTable).key(item)).get();
-
-		}else if(graphQuery instanceof SubscriptionTerminate) {
-			Map<String, AttributeValue> keyConditions = new HashMap<>();
-			keyConditions.put(":connectionId", AttributeValue.builder().s(connectionId).build());
-
-			List<Map<String, AttributeValue>> items = manager.getDynamoDbAsyncClient().query(t -> t.tableName(subscriptionTable).keyConditionExpression("connectionId = :connectionId").expressionAttributeValues(keyConditions)).get().items();
-
-			for(var item: items) {
-				manager.getDynamoDbAsyncClient().deleteItem(t -> t.tableName(subscriptionTable).key(item)).get();
-			}
-		}
-
+	private void disconnect(final APIGatewayV2ProxyRequestEvent input) throws InterruptedException, ExecutionException {
+		admin.disconnect(input.getRequestContext().getConnectionId());
 	}
 
 
+	@VisibleForTesting
+	public void process(String connectionId, SubscriptionMessage<?> graphQuery) throws JsonProcessingException, InterruptedException, ExecutionException {
+		if (graphQuery instanceof SubscriptionConnectionInit) {
+			final var authHeader = ((SubscriptionConnectionInit) graphQuery).getPayload().getAuthorization();
+			final var userContext = validateUser(authHeader);
+			final var message = admin.connect(connectionId, userContext.get());
 
+			if (message != null) {
+				sendMessage(connectionId, manager.getMapper().writeValueAsString(message));
+			}
+		} else if (graphQuery instanceof SubscriptionStart) {
+			final var query = ((SubscriptionStart) graphQuery).getPayload();
+			final var id = graphQuery.getId();
+			final var message = admin.subscribe(connectionId, id, query, this::buildSubscriptionId);
+
+			if (message != null) {
+				sendMessage(connectionId, manager.getMapper().writeValueAsString(message));
+			}
+		} else if (graphQuery instanceof SubscriptionStop) {
+			admin.unsubscribe(connectionId, graphQuery.getId());
+		} else if (graphQuery instanceof SubscriptionTerminate) {
+			admin.disconnect(connectionId);
+		} else if (graphQuery instanceof SubscriptionPong) {
+			admin.verified(connectionId);
+		}
+	}
 
 	@VisibleForTesting
 	protected void sendMessage(String connectionId, String message) {
-		gatewayApi.postToConnection(b -> b.connectionId(connectionId).data(SdkBytes.fromString(message, StandardCharsets.UTF_8)));
+		gatewayApi
+				.postToConnection(b -> b.connectionId(connectionId)
+						.overrideConfiguration(
+								c -> c.apiCallTimeout(Duration.ofMillis(20)).apiCallAttemptTimeout(Duration.ofMillis(20)))
+						.data(SdkBytes.fromString(message, StandardCharsets.UTF_8)));
 	}
 	
 	protected abstract void prepare() throws Exception;
@@ -203,16 +132,6 @@ public abstract class LambdaSubscriptionControl<U> implements RequestHandler<API
 	protected abstract DynamoDbManager builderManager();
 	
 	public abstract CompletableFuture<U> validateUser(String authHeader);
-	public abstract String extractUserId(U user);
-	public abstract AttributeValue extraUserInfo(U user);
 	public abstract String buildSubscriptionId(String subscription, Map<String, Object> variables);
 
-
-	public String mapName(String queryName) {
-		return queryName;
-	}
-
-
-
-	
 }
