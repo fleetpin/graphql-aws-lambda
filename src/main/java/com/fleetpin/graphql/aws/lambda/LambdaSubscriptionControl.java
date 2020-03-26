@@ -120,11 +120,7 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 
 	@VisibleForTesting
 	protected void sendMessage(String connectionId, String message) {
-		gatewayApi
-				.postToConnection(b -> b.connectionId(connectionId)
-						.overrideConfiguration(
-								c -> c.apiCallTimeout(Duration.ofMillis(20)).apiCallAttemptTimeout(Duration.ofMillis(20)))
-						.data(SdkBytes.fromString(message, StandardCharsets.UTF_8)));
+		gatewayApi.postToConnection(b -> b.connectionId(connectionId).data(SdkBytes.fromString(message, StandardCharsets.UTF_8)));
 	}
 	
 	protected abstract void prepare() throws Exception;
