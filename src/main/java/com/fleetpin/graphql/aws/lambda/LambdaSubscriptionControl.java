@@ -29,6 +29,7 @@ import software.amazon.awssdk.services.apigatewaymanagementapi.ApiGatewayManagem
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -38,8 +39,20 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 	private final ApiGatewayManagementApiClient gatewayApi;
 	private final DynamoDbManager manager;
 	private final Admin<U> admin;
+	private final Map<String, String> subscriptionNameMapping;
 
-	public LambdaSubscriptionControl(String subscriptionTable, String gatewayUri) throws Exception {
+	public LambdaSubscriptionControl(
+			final String subscriptionTable,
+			final String gatewayUri
+	) throws Exception {
+		this(subscriptionTable, gatewayUri, Collections.emptyMap());
+	}
+
+	public LambdaSubscriptionControl(
+			final String subscriptionTable,
+			final String gatewayUri,
+			final Map<String, String> subscriptionNameMapping
+	) throws Exception {
 		prepare();
 		this.manager = builderManager();
 		final GraphQL graph = buildGraphQL().subscriptionExecutionStrategy(new InterceptExecutionStrategy()).build();
@@ -52,6 +65,8 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 		}
 
 		this.admin = new Admin<>(graph, subscriptionTable, manager, Long.parseLong(System.getenv("LAST_SEEN_TIMEOUT")));
+
+		this.subscriptionNameMapping = subscriptionNameMapping;
 	}
 
 	@Override

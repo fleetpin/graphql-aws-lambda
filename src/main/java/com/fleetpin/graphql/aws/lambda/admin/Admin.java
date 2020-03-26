@@ -29,6 +29,7 @@ public class Admin<U extends User> {
     private final String subscriptionTable;
     private final DynamoDbManager manager;
     private final long lastSeenTimeout;
+    private final Map<String, String> subscriptionNameMapping;
 
     public Admin(
             final GraphQL graph,
@@ -40,6 +41,21 @@ public class Admin<U extends User> {
         this.subscriptionTable = subscriptionTable;
         this.manager = manager;
         this.lastSeenTimeout = lastSeenTimeout;
+        this.subscriptionNameMapping = Collections.emptyMap();
+    }
+
+    public Admin(
+            final GraphQL graph,
+            final String subscriptionTable,
+            final DynamoDbManager manager,
+            final long lastSeenTimeout,
+            final Map<String, String> subscriptionNameMapping
+    ) {
+        this.graph = graph;
+        this.subscriptionTable = subscriptionTable;
+        this.manager = manager;
+        this.lastSeenTimeout = lastSeenTimeout;
+        this.subscriptionNameMapping = subscriptionNameMapping;
     }
 
     /**
@@ -164,7 +180,7 @@ public class Admin<U extends User> {
 
                 return new SubscriptionResponseError(queryId, error);
             } else {
-                final String subscription = result.getData();
+                final String subscription = mapSubscriptionName(result.getData());
                 final Map<String, AttributeValue> item = new HashMap<>();
 
                 item.put(CONNECTION_ID, AttributeValue.builder().s(connectionId).build());
@@ -334,6 +350,10 @@ public class Admin<U extends User> {
         }
 
         return false;
+    }
+
+    private String mapSubscriptionName(final String name) {
+        return subscriptionNameMapping.getOrDefault(name, name);
     }
 
     public interface SubscriptionIdBuilder {
