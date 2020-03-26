@@ -30,10 +30,11 @@ import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
 		@Type(value = SubscriptionResponseData.class, name = "data"), //GQL_DATA
 		@Type(value = SubscriptionResponseError.class, name = "error"), //GQL_ERROR
 		@Type(value = SubscriptionResponseComplete.class, name = "complete"), //GQL_COMPLETE
-		@Type(value = SubscriptionResponseKeepAlive.class, name = "ka"), //GQL_CONNECTION_KEEP_ALIVE
+		@Type(value = SubscriptionResponseKeepAlive.class, name = "connection_keep_alive"), //GQL_CONNECTION_KEEP_ALIVE
+		@Type(value = SubscriptionPong.class, name = "connection_pong")
 })
 @JsonIgnoreProperties("type")
-public class WebsocketMessage<T> {
+public class SubscriptionMessage<T> {
 	private T payload;
 	private String id;
 
