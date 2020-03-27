@@ -14,7 +14,7 @@ package com.fleetpin.graphql.aws.lambda.subscription;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-public class SubscriptionConnectionInit extends WebsocketMessage<SubscriptionConnectionInit.ConnectionPayload>{
+public class SubscriptionConnectionInit extends SubscriptionMessage<SubscriptionConnectionInit.ConnectionPayload> {
 
 	@JsonCreator
 	public SubscriptionConnectionInit(String id, ConnectionPayload payload) {

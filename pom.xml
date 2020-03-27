@@ -62,6 +62,25 @@
 				</configuration>
 			</plugin>
 			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>2.10</version>
+				<executions>
+					<execution>
+						<id>copy</id>
+						<phase>test-compile</phase>
+						<goals>
+							<goal>copy-dependencies</goal>
+						</goals>
+						<configuration>
+							<includeScope>test</includeScope>
+							<includeTypes>so,dll,dylib</includeTypes>
+							<outputDirectory>${project.basedir}/native-libs</outputDirectory>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>2.22.2</version>
 			</plugin>
@@ -85,7 +104,7 @@
 		<dependency>
 			<groupId>com.fleetpin</groupId>
 			<artifactId>graphql-database-manager-dynamo</artifactId>
-			<version>0.2.0</version>
+			<version>0.2.2</version>
 		</dependency>
 		<dependency>
 			<groupId>com.fleetpin</groupId>
@@ -151,6 +170,20 @@
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter</artifactId>
 			<version>${junit.jupiter.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>DynamoDBLocal</artifactId>
+			<version>1.11.477</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.fleetpin</groupId>
+			<artifactId>graphql-database-manager-test</artifactId>
+			<version>0.2.2</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
