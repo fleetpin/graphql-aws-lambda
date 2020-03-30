@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.fleetpin</groupId>
 	<artifactId>graphql-aws-lambda</artifactId>
-	<version>0.1.17</version>
+	<version>0.1.18-SNAPSHOT</version>
 	<name>graphQL AWS Lambda</name>
 	<description>library that allows you to use a lambda endpoint as a graphql API</description>
 	<url>https://github.com/fleetpin/graphql-aws-lambda</url>
@@ -49,6 +49,14 @@
 		</developer>
 	</developers>
 
+	<!--  this bugs me that its not in the central repo -->
+    <repositories>
+        <repository>
+           <id>dynamodb-local-oregon</id>
+           <name>DynamoDB Local Release Repository</name>
+           <url>https://s3-us-west-2.amazonaws.com/dynamodb-local/release</url>
+       </repository>
+   </repositories>
 
 	<build>
 		<plugins>
@@ -104,12 +112,12 @@
 		<dependency>
 			<groupId>com.fleetpin</groupId>
 			<artifactId>graphql-database-manager-dynamo</artifactId>
-			<version>0.2.2</version>
+			<version>0.2.7</version>
 		</dependency>
 		<dependency>
 			<groupId>com.fleetpin</groupId>
 			<artifactId>graphql-builder</artifactId>
-			<version>0.1.2</version>
+			<version>0.1.5</version>
 		</dependency>
 		<dependency>
 			<groupId>com.amazonaws</groupId>
