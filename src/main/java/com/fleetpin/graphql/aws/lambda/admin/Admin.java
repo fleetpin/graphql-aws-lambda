@@ -6,10 +6,7 @@ import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseAccept;
 import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseConnectionError;
 import com.fleetpin.graphql.aws.lambda.subscription.SubscriptionResponseError;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
-import graphql.ExecutionResult;
-import graphql.GraphQL;
-import graphql.GraphQLError;
-import graphql.GraphqlErrorBuilder;
+import graphql.*;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
 import java.time.Instant;
@@ -30,32 +27,22 @@ public class Admin<U extends User> {
     private final DynamoDbManager manager;
     private final long lastSeenTimeout;
     private final Map<String, String> subscriptionNameMapping;
-
-    public Admin(
-            final GraphQL graph,
-            final String subscriptionTable,
-            final DynamoDbManager manager,
-            final long lastSeenTimeout
-    ) {
-        this.graph = graph;
-        this.subscriptionTable = subscriptionTable;
-        this.manager = manager;
-        this.lastSeenTimeout = lastSeenTimeout;
-        this.subscriptionNameMapping = Collections.emptyMap();
-    }
+    private final Time time;
 
     public Admin(
             final GraphQL graph,
             final String subscriptionTable,
             final DynamoDbManager manager,
             final long lastSeenTimeout,
-            final Map<String, String> subscriptionNameMapping
+            final Map<String, String> subscriptionNameMapping,
+            final Time time
     ) {
         this.graph = graph;
         this.subscriptionTable = subscriptionTable;
         this.manager = manager;
         this.lastSeenTimeout = lastSeenTimeout;
         this.subscriptionNameMapping = subscriptionNameMapping;
+        this.time = time;
     }
 
     /**
@@ -86,14 +73,14 @@ public class Admin<U extends User> {
                                 AttributeValue
                                         .builder()
                                         .n(Long
-                                                .toString(Instant.now().plus(7, ChronoUnit.DAYS)
+                                                .toString(time.currentTime().plus(7, ChronoUnit.DAYS)
                                                         .toEpochMilli()))
                                         .build()
                         ); // if connection still there in a week just delete
 
                 item.put(
                         LAST_SEEN,
-                        AttributeValue.builder().n(Long.toString(Instant.now().toEpochMilli())).build()
+                        AttributeValue.builder().n(Long.toString(time.currentTime().toEpochMilli())).build()
                 );
 
                 manager.getDynamoDbAsyncClient().putItem(t -> t.tableName(subscriptionTable).item(item)).get();
@@ -187,8 +174,8 @@ public class Admin<U extends User> {
                 item.put(ID, AttributeValue.builder().s(queryId).build());
                 item.put(SUBSCRIPTION, AttributeValue.builder().s(subscription + ":" + idBuilder.build(subscription, query.getVariables())).build());
                 item.put(QUERY, manager.toAttributes(query));
-                item.put(TTL, AttributeValue.builder().n(Long.toString(Instant.now().plus(7, ChronoUnit.DAYS).toEpochMilli())).build()); //if connection still there in a week just delete
-                item.put(LAST_SEEN, AttributeValue.builder().n(Long.toString(Instant.now().toEpochMilli())).build());
+                item.put(TTL, AttributeValue.builder().n(Long.toString(time.currentTime().plus(7, ChronoUnit.DAYS).toEpochMilli())).build()); //if connection still there in a week just delete
+                item.put(LAST_SEEN, AttributeValue.builder().n(Long.toString(time.currentTime().toEpochMilli())).build());
 
                 manager.getDynamoDbAsyncClient().putItem(t -> t.tableName(subscriptionTable).item(item)).get();
             }
@@ -247,7 +234,6 @@ public class Admin<U extends User> {
                 .tableName(subscriptionTable)
                 .projectionExpression("connectionId, lastSeen")
                 .build();
-        final var now = Instant.now().toEpochMilli();
 
         try {
             return manager
@@ -257,7 +243,7 @@ public class Admin<U extends User> {
                     .items()
                     .stream()
                     .map(item -> {
-                        if (verify(item, now)) {
+                        if (verify(item)) {
                             return item;
                         } else {
                             return null;
@@ -277,7 +263,7 @@ public class Admin<U extends User> {
      * @param connectionId the id of the connection
      */
     public void verified(final String connectionId) throws ExecutionException, InterruptedException {
-        final var now = Instant.now().toEpochMilli();
+        final var now = time.currentTime().toEpochMilli();
         final Map<String, AttributeValueUpdate> updates = new HashMap<>();
 
         final var connections = getConnections(connectionId);
@@ -336,10 +322,10 @@ public class Admin<U extends User> {
                 .items();
     }
 
-    private boolean verify(final Map<String, AttributeValue> item, final long now) {
+    private boolean verify(final Map<String, AttributeValue> item) {
         final var lastSeen = Long.parseLong(item.get("lastSeen").n());
 
-        if (now - lastSeenTimeout < lastSeen) {
+        if (time.currentTime().toEpochMilli() - lastSeenTimeout < lastSeen) {
             return true;
         }
 
@@ -356,8 +342,75 @@ public class Admin<U extends User> {
         return subscriptionNameMapping.getOrDefault(name, name);
     }
 
+    public static class AdminBuilder<U extends User> {
+
+        private GraphQL graph;
+        private String subscriptionTable;
+        private DynamoDbManager manager;
+        private Long lastSeenTimeout;
+        private Map<String, String> subscriptionNameMapping;
+        private Time time;
+
+        public AdminBuilder() {
+            this.subscriptionNameMapping = Collections.emptyMap();
+            this.time = Instant::now;
+        }
+
+        public AdminBuilder<U> withGraph(final GraphQL graph) {
+            this.graph = graph;
+
+            return this;
+        }
+
+        public AdminBuilder<U> withSubscriptionTable(final String subscriptionTable) {
+            this.subscriptionTable = subscriptionTable;
+
+            return this;
+        }
+
+        public AdminBuilder<U> withManager(final DynamoDbManager manager) {
+            this.manager = manager;
+
+            return this;
+        }
+
+        public AdminBuilder<U> withLastSeenTimeout(final long lastSeenTimeout) {
+            this.lastSeenTimeout = lastSeenTimeout;
+
+            return this;
+        }
+
+        public AdminBuilder<U> withSubscriptionNameMapping(final Map<String, String> subscriptionNameMapping) {
+            this.subscriptionNameMapping = subscriptionNameMapping;
+
+            return this;
+        }
+
+        public AdminBuilder<U> withTime(final Time time) {
+            this.time = time;
+
+            return this;
+        }
+
+        public Admin<U> build() {
+            return new Admin<>(
+                    Objects.requireNonNull(graph),
+                    Objects.requireNonNull(subscriptionTable),
+                    Objects.requireNonNull(manager),
+                    Objects.requireNonNull(lastSeenTimeout),
+                    subscriptionNameMapping,
+                    time
+            );
+        }
+
+    }
+
     public interface SubscriptionIdBuilder {
         String build(String subscription, Map<String, Object> variables);
+    }
+
+    public interface Time {
+        Instant currentTime();
     }
 
 }

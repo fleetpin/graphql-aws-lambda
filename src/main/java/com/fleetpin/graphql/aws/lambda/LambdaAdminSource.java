@@ -31,12 +31,12 @@ public abstract class LambdaAdminSource<U extends User, E> implements RequestHan
                 .endpointOverride(new URI(gatewayUri))
                 .build();
 
-        admin = new Admin<>(
-                graph,
-                subscriptionTable,
-                manager,
-                Long.parseLong(System.getenv("LAST_SEEN_TIMEOUT"))
-        );
+        admin = new Admin.AdminBuilder<U>()
+                .withGraph(graph)
+                .withSubscriptionTable(subscriptionTable)
+                .withManager(manager)
+                .withLastSeenTimeout(Long.parseLong(System.getenv("LAST_SEEN_TIMEOUT")))
+                .build();
     }
 
     protected Admin<U> getAdmin() {
