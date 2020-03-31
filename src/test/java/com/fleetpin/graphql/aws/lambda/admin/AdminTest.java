@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.function.UnaryOperator;
@@ -22,12 +23,18 @@ import static org.mockito.Mockito.when;
 
 public class AdminTest {
 
+    private static final int LAST_SEEN_TIMEOUT = 200;
+
     private GraphQL graphQL = mock(GraphQL.class);
+    private Admin.Time time = mock(Admin.Time.class);
 
     @TestDatabase
     public void canConnect(final DynamoDbManager databaseManager) throws ExecutionException, InterruptedException {
         createDatabase(databaseManager);
         final var admin = createAdmin(databaseManager);
+
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(1000L));
+
         createUser(admin);
     }
 
@@ -35,6 +42,9 @@ public class AdminTest {
     public void canDisconnect(final DynamoDbManager databaseManager) throws ExecutionException, InterruptedException {
         createDatabase(databaseManager);
         final var admin = createAdmin(databaseManager);
+
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(1000L));
+
         createUser(admin);
 
         admin.disconnect("123456");
@@ -48,6 +58,9 @@ public class AdminTest {
 
         createDatabase(databaseManager);
         final var admin = createAdmin(databaseManager);
+
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(1000L));
+
         createUser(admin);
 
         final var query = read("subscription-start.gql");
@@ -71,6 +84,9 @@ public class AdminTest {
 
         createDatabase(databaseManager);
         final var admin = createAdmin(databaseManager);
+
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(1000L));
+
         createUser(admin);
 
         final var query = read("subscription-start.gql");
@@ -96,6 +112,9 @@ public class AdminTest {
     public void canVerifyThatConnectionsAreCurrent(final DynamoDbManager databaseManager) throws ExecutionException, InterruptedException {
         createDatabase(databaseManager);
         final var admin = createAdmin(databaseManager);
+
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(1000L));
+
         createUser(admin);
 
         {
@@ -104,7 +123,7 @@ public class AdminTest {
             Assertions.assertEquals(1, current.size());
         }
 
-        Thread.sleep(300);
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(1500L));
 
         {
             final var current = admin.verify();
@@ -118,6 +137,9 @@ public class AdminTest {
     public void canUpdateConnectionVerificationStatus(final DynamoDbManager databaseManager) throws ExecutionException, InterruptedException {
         createDatabase(databaseManager);
         final var admin = createAdmin(databaseManager);
+
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(1000L));
+
         createUser(admin);
 
         {
@@ -126,9 +148,11 @@ public class AdminTest {
             Assertions.assertEquals(1, current.size());
         }
 
-        Thread.sleep(300);
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(2000L));
 
         admin.verified("123456");
+
+        when(time.currentTime()).thenReturn(Instant.ofEpochMilli(2100L));
 
         {
             final var current = admin.verify();
@@ -139,7 +163,13 @@ public class AdminTest {
     }
 
     private Admin<TestUser> createAdmin(final DynamoDbManager databaseManager) {
-        return new Admin<>(graphQL, "subscriptions", databaseManager, 200);
+        return new Admin.AdminBuilder<TestUser>()
+                .withGraph(graphQL)
+                .withSubscriptionTable("subscriptions")
+                .withManager(databaseManager)
+                .withLastSeenTimeout(LAST_SEEN_TIMEOUT)
+                .withTime(time)
+                .build();
     }
 
     private void createUser(final Admin<TestUser> admin) throws ExecutionException, InterruptedException {
@@ -195,7 +225,7 @@ public class AdminTest {
         }
     }
 
-    private class TestExecutionResult implements ExecutionResult {
+    private static class TestExecutionResult implements ExecutionResult {
 
         @Override
         public List<GraphQLError> getErrors() {

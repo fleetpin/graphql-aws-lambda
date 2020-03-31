@@ -28,7 +28,6 @@ import software.amazon.awssdk.services.apigatewaymanagementapi.ApiGatewayManagem
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -64,7 +63,12 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 			this.gatewayApi = ApiGatewayManagementApiClient.builder().endpointOverride(endpoint).build();
 		}
 
-		this.admin = new Admin<>(graph, subscriptionTable, manager, Long.parseLong(System.getenv("LAST_SEEN_TIMEOUT")));
+		this.admin = new Admin.AdminBuilder<U>()
+				.withGraph(graph)
+				.withSubscriptionTable(subscriptionTable)
+				.withManager(manager)
+				.withLastSeenTimeout(Long.parseLong(System.getenv("LAST_SEEN_TIMEOUT")))
+				.build();
 
 		this.subscriptionNameMapping = subscriptionNameMapping;
 	}
