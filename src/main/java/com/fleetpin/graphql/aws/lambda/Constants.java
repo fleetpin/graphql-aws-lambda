@@ -12,4 +12,7 @@ public class Constants {
     public static final String QUERY = "query";
     public static final String LAST_SEEN = "lastSeen";
 
+    public static final String ENV_LAST_SEEN_TIMEOUT = "ENV_LAST_SEEN_TIMEOUT";
+    public static final String ENV_SENT_MESSAGE_TIMEOUT = "ENV_SENT_MESSAGE_TIMEOUT";
+
 }

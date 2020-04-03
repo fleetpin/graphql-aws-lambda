@@ -52,6 +52,8 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 	private final LambdaCache<String, CompletableFuture<GetItemResponse>> userCache;
 	private final LambdaCache<String, CompletableFuture<QueryResponse>> organisationCache;
 	private final String subscriptionTable;
+
+	private final long sentMessageTimeout;
 	
 	public LambdaSubscriptionSource(String subscriptionId, String subscriptionTable, String apiUri, Duration userCacheTTL, Duration subscriptionCacheTTL) throws Exception {
 		prepare();
@@ -80,7 +82,9 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
     		key.put("connectionId", AttributeValue.builder().s(connectionId).build());
     		key.put("id", AttributeValue.builder().s("auth").build());
     		return manager.getDynamoDbAsyncClient().getItem(t -> t.tableName(subscriptionTable).key(key));
-		});					
+		});
+
+		sentMessageTimeout = Long.parseLong(System.getenv(Constants.ENV_SENT_MESSAGE_TIMEOUT));
 		
 	}
 
@@ -189,9 +193,11 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
 
 	@VisibleForTesting
 	protected CompletableFuture<PostToConnectionResponse> sendMessage(String connectionId, String sendResponse) {
-		return gatewayApi.postToConnection(b -> b.connectionId(connectionId).data(SdkBytes.fromString(sendResponse , StandardCharsets.UTF_8)));
+		return gatewayApi.postToConnection(b -> b.overrideConfiguration(
+				c -> c
+						.apiCallTimeout(Duration.ofMillis(sentMessageTimeout))
+						.apiCallAttemptTimeout(Duration.ofMillis(sentMessageTimeout))
+		).connectionId(connectionId).data(SdkBytes.fromString(sendResponse, StandardCharsets.UTF_8)));
 	}
-
-
 
 }
