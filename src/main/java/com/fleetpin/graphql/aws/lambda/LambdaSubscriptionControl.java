@@ -77,10 +77,9 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 	public APIGatewayV2ProxyResponseEvent handleRequest(APIGatewayV2ProxyRequestEvent input, Context context) {
 		try {
 			switch(input.getRequestContext().getEventType()) {
-			case "CONNECT" :  {
+			case "CONNECT" :
 				break;
-			}
-			case "DISCONNECT" :
+				case "DISCONNECT" :
 
 				disconnect(input);
 				break;
@@ -132,8 +131,6 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 			admin.unsubscribe(connectionId, graphQuery.getId());
 		} else if (graphQuery instanceof SubscriptionTerminate) {
 			admin.disconnect(connectionId);
-		} else if (graphQuery instanceof SubscriptionPong) {
-			admin.verified(connectionId);
 		}
 	}
 

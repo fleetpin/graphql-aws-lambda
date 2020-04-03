@@ -262,7 +262,8 @@ public class Admin<U extends User> {
      *
      * @param connectionId the id of the connection
      */
-    public void verified(final String connectionId) throws ExecutionException, InterruptedException {
+    public void verified(final String connectionId) {
+        try {
         final var now = time.currentTime().toEpochMilli();
         final Map<String, AttributeValueUpdate> updates = new HashMap<>();
 
@@ -282,25 +283,25 @@ public class Admin<U extends User> {
                         .build()
         );
 
-        for (var connection : connections) {
-            final var id = connection.get(ID).s();
-            final Map<String, AttributeValue> key = new HashMap<>();
+            for (var connection : connections) {
+                final var id = connection.get(ID).s();
+                final Map<String, AttributeValue> key = new HashMap<>();
 
-            key.put(CONNECTION_ID, AttributeValue.builder().s(connectionId).build());
-            key.put(ID, AttributeValue.builder().s(id).build());
+                key.put(CONNECTION_ID, AttributeValue.builder().s(connectionId).build());
+                key.put(ID, AttributeValue.builder().s(id).build());
 
-            final var request = UpdateItemRequest
-                    .builder()
-                    .key(key)
-                    .attributeUpdates(updates)
-                    .tableName(subscriptionTable)
-                    .build();
+                final var request = UpdateItemRequest
+                        .builder()
+                        .key(key)
+                        .attributeUpdates(updates)
+                        .tableName(subscriptionTable)
+                        .build();
 
-            try {
-                manager.getDynamoDbAsyncClient().updateItem(request).get();
-            } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException(e);
+
+                    manager.getDynamoDbAsyncClient().updateItem(request).get();
             }
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -402,7 +403,6 @@ public class Admin<U extends User> {
                     time
             );
         }
-
     }
 
     public interface SubscriptionIdBuilder {
