@@ -63,17 +63,7 @@ public abstract class LambdaAdminSource<U extends User, E> implements RequestHan
                         .connectionId(connectionId)
                         .data(SdkBytes.fromString(getPingMessage(), StandardCharsets.UTF_8))
                 )
-                .exceptionally(error -> {
-                    logger.warn("Disconnecting {}", connectionId);
-
-                    try {
-                        admin.disconnect(connectionId);
-                    } catch (ExecutionException | InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-
-                    return null;
-                })
+                .exceptionally(error -> null)
                 .thenAccept(response -> {
                     if (response == null) {
                         return;
