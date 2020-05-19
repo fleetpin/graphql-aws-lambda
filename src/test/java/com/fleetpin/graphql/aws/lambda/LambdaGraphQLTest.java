@@ -1,6 +1,8 @@
 package com.fleetpin.graphql.aws.lambda;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyRequestEvent;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fleetpin.graphql.aws.lambda.admin.User;
 import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
@@ -9,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.skyscreamer.jsonassert.JSONAssert;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.io.IOException;
@@ -33,7 +36,7 @@ class LambdaGraphQLTest {
     @BeforeEach
     void setUp() throws IOException {
         when(graphQL.executeAsync(any(UnaryOperator.class))).thenReturn(
-                CompletableFuture.completedFuture(ExecutionResultImpl.newExecutionResult().data("Foo").build())
+                CompletableFuture.completedFuture(ExecutionResultImpl.newExecutionResult().build())
         );
 
         body = readResourceAsString("simple_graphql_request.json");
@@ -42,6 +45,7 @@ class LambdaGraphQLTest {
 
     @Test
     void expiredToken() throws Exception {
+        final var expectedBody = readResourceAsString("access_denied_response.json");
         final var input = new APIGatewayV2ProxyRequestEvent();
         input.setBody(body);
         input.setHeaders(Map.of("Authorization", token));
@@ -50,11 +54,12 @@ class LambdaGraphQLTest {
         final var response = unauthorizedHandler.handleRequest(input, null);
 
         assertEquals(200, response.getStatusCode());
-        assertTrue(response.getBody().contains("AccessDeniedError"));
+        JSONAssert.assertEquals(expectedBody, response.getBody(), true);
     }
 
     @Test
     void goodToken() throws Exception {
+        final var expectedBody = readResourceAsString("simple_graphql_response.json");
         final var input = new APIGatewayV2ProxyRequestEvent();
         input.setBody(body);
         input.setHeaders(Map.of("Authorization", token));
@@ -64,8 +69,7 @@ class LambdaGraphQLTest {
         final var response = authorizedHandler.handleRequest(input, null);
 
         assertEquals(200, response.getStatusCode());
-        assertFalse(response.getBody().contains("errors"));
-        assertFalse(response.getBody().contains("AccessDeniedError"));
+        JSONAssert.assertEquals(expectedBody, response.getBody(), true);
     }
 
     private static String readResourceAsString(final String resourcePath) throws IOException {

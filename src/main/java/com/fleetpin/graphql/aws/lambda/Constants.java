@@ -1,5 +1,7 @@
 package com.fleetpin.graphql.aws.lambda;
 
+import java.util.Map;
+
 public class Constants {
     private Constants() {}
 
@@ -18,4 +20,8 @@ public class Constants {
 
     public static final String GRAPHQL_ACCESS_DENIED = "AccessDeniedError";
     public static final String GRAPHQL_ERRORS_FIELD = "errors";
+    public static final Map<String, String> GRAPHQL_RESPONSE_HEADERS = Map.of(
+            "Access-Control-Allow-Origin", "*",
+            "content-type", "application/json; charset=utf-8"
+    );
 }

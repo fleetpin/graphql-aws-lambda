@@ -23,7 +23,6 @@ import graphql.GraphQL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -32,11 +31,6 @@ import static com.google.common.net.HttpHeaders.AUTHORIZATION;
 public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements RequestHandler<APIGatewayV2ProxyRequestEvent,
         APIGatewayV2ProxyResponseEvent> {
     private static final Logger logger = LoggerFactory.getLogger(LambdaGraphQL.class);
-    private static final Map<String, String> RESPONSE_HEADERS = Map.of(
-            "Access-Control-Allow-Origin", "*",
-            "content-type", "application/json; charset=utf-8"
-    );
-
     private final ObjectMapper mapper;
     private GraphQL build;
 
@@ -52,9 +46,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
     ) {
         try {
             final var query = mapper.readValue(input.getBody(), GraphQLQuery.class);
-
             final var user = validate(input.getHeaders().get(AUTHORIZATION)).get();
-
             final C graphContext = buildContext(user, query);
             final var queryResponse = build.executeAsync(builder -> builder.query(query.getQuery())
                     .operationName(query.getOperationName())
@@ -69,22 +61,21 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
 
             final var response = new APIGatewayV2ProxyResponseEvent();
             response.setStatusCode(200);
-            response.setHeaders(RESPONSE_HEADERS);
+            response.setHeaders(Constants.GRAPHQL_RESPONSE_HEADERS);
             response.setBody(serializedQueryResponse.toString());
 
             return response;
         } catch (final ExecutionException e) {
             logger.error("Failed to validate user", e);
 
-            final var badResponse = new APIGatewayV2ProxyResponseEvent();
-            badResponse.setStatusCode(200);
-
             final var response = new ObjectNode(JsonNodeFactory.instance);
             response.putArray(Constants.GRAPHQL_ERRORS_FIELD).add(Constants.GRAPHQL_ACCESS_DENIED);
 
-            badResponse.setBody(response.toString());
+            final var accessDeniedResponse = new APIGatewayV2ProxyResponseEvent();
+            accessDeniedResponse.setStatusCode(200);
+            accessDeniedResponse.setBody(response.toString());
 
-            return badResponse;
+            return accessDeniedResponse;
         } catch (final Throwable e) {
             logger.error("Failed to invoke graph", e);
             throw new RuntimeException(e);
