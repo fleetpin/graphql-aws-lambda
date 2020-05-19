@@ -127,14 +127,14 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 			}
 		} else if (graphQuery instanceof SubscriptionStart) {
 			final var query = ((SubscriptionStart) graphQuery).getPayload();
-			final var id = graphQuery.getId();
+			final var id = mapSubscriptionName(graphQuery.getId());
 			final var message = admin.subscribe(connectionId, id, query, this::buildSubscriptionId);
 
 			if (message != null) {
 				sendMessage(connectionId, manager.getMapper().writeValueAsString(message));
 			}
 		} else if (graphQuery instanceof SubscriptionStop) {
-			admin.unsubscribe(connectionId, graphQuery.getId());
+			admin.unsubscribe(connectionId, mapSubscriptionName(graphQuery.getId()));
 		} else if (graphQuery instanceof SubscriptionTerminate) {
 			admin.disconnect(connectionId);
 		}
@@ -151,5 +151,9 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 	
 	public abstract CompletableFuture<U> validateUser(String authHeader);
 	public abstract String buildSubscriptionId(String subscription, Map<String, Object> variables);
+
+	protected String mapSubscriptionName(final String name) {
+		return name;
+	}
 
 }
