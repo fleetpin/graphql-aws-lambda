@@ -15,7 +15,6 @@ import java.util.concurrent.CompletionStage;
 
 import com.fleetpin.graphql.builder.annotations.Context;
 
-
 @Context
 public interface ContextGraphQL{
 	void start(CompletionStage<?> complete);

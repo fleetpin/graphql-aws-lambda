@@ -2,9 +2,14 @@ package com.fleetpin.graphql.aws.lambda;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyRequestEvent;
 import com.fleetpin.graphql.aws.lambda.admin.User;
+import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,36 +17,61 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.function.UnaryOperator;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class LambdaGraphQLTest {
-    private static String BODY;
-    private static String EXPIRED_TOKEN;
+    @Mock(lenient = true)
+    private GraphQL graphQL;
+    private String body;
+    private String token;
 
     @BeforeEach
     void setUp() throws IOException {
-        BODY = readResourceAsString("simple_graphql_request.json");
-        EXPIRED_TOKEN = readResourceAsString("expired_token.txt");
+        when(graphQL.executeAsync(any(UnaryOperator.class))).thenReturn(
+                CompletableFuture.completedFuture(ExecutionResultImpl.newExecutionResult().data("Foo").build())
+        );
+
+        body = readResourceAsString("simple_graphql_request.json");
+        token = readResourceAsString("token.txt");
     }
 
     @Test
     void expiredToken() throws Exception {
         final var input = new APIGatewayV2ProxyRequestEvent();
-        input.setBody(BODY);
-        input.setHeaders(Map.of("Authorization", EXPIRED_TOKEN));
+        input.setBody(body);
+        input.setHeaders(Map.of("Authorization", token));
         final var unauthorizedHandler = new UnauthorizedGraphHandler();
 
         final var response = unauthorizedHandler.handleRequest(input, null);
 
-        assertEquals(401, response.getStatusCode());
+        assertEquals(200, response.getStatusCode());
+        assertTrue(response.getBody().contains("AccessDeniedError"));
+    }
+
+    @Test
+    void goodToken() throws Exception {
+        final var input = new APIGatewayV2ProxyRequestEvent();
+        input.setBody(body);
+        input.setHeaders(Map.of("Authorization", token));
+        final var authorizedHandler = new AuthorizedGraphHandler(graphQL);
+        authorizedHandler.updateGraphQL();
+
+        final var response = authorizedHandler.handleRequest(input, null);
+
+        assertEquals(200, response.getStatusCode());
+        assertFalse(response.getBody().contains("body"));
     }
 
     private static String readResourceAsString(final String resourcePath) throws IOException {
         return Files.readString(Path.of(ClassLoader.getSystemResource(resourcePath).getPath()));
     }
 
-    private class UnauthorizedGraphHandler extends LambdaGraphQL<User, NoopGraphQLContext> {
+    private static class UnauthorizedGraphHandler extends LambdaGraphQL<User, NoopGraphQLContext> {
         private final NoopGraphQLContext noopGraphQLContext;
         private final CompletableFuture<User> validateFuture;
 
@@ -57,7 +87,7 @@ class LambdaGraphQLTest {
 
         @Override
         protected CompletableFuture<User> validate(final String authHeader) {
-            return validateFuture; // This should roughly mimic the apis behaviour
+            return validateFuture;
         }
 
         @Override
@@ -66,7 +96,44 @@ class LambdaGraphQLTest {
         }
     }
 
-    private class NoopGraphQLContext implements ContextGraphQL {
+    private static class AuthorizedGraphHandler extends LambdaGraphQL<User, NoopGraphQLContext> {
+        private final NoopGraphQLContext noopGraphQLContext;
+        private final CompletableFuture<User> validateFuture;
+        private final GraphQL graphQL;
+
+        public AuthorizedGraphHandler(final GraphQL graphQL) throws Exception {
+            this.graphQL = graphQL;
+            noopGraphQLContext = new NoopGraphQLContext();
+            validateFuture = CompletableFuture.completedFuture(new User() {
+                @Override
+                public String getId() {
+                    return "f57f3d27-8fcf-4c76-8358-e16ed57839d1";
+                }
+
+                @Override
+                public AttributeValue getExtraUserInfo() {
+                    return null;
+                }
+            });
+        }
+
+        @Override
+        protected GraphQL buildGraphQL() {
+            return graphQL;
+        }
+
+        @Override
+        protected CompletableFuture<User> validate(final String authHeader) {
+            return validateFuture;
+        }
+
+        @Override
+        protected NoopGraphQLContext buildContext(final User user, final GraphQLQuery query) {
+            return noopGraphQLContext;
+        }
+    }
+
+    private static class NoopGraphQLContext implements ContextGraphQL {
         @Override
         public void start(final CompletionStage<?> complete) {
             // won't do anything
