@@ -39,7 +39,6 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 	private final ApiGatewayManagementApiClient gatewayApi;
 	private final DynamoDbManager manager;
 	private final Admin<U> admin;
-	private final Map<String, String> subscriptionNameMapping;
 
 	public LambdaSubscriptionControl(
 			final String subscriptionTable,
@@ -68,6 +67,7 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 				.withGraph(graph)
 				.withSubscriptionTable(subscriptionTable)
 				.withManager(manager)
+				.withSubscriptionNameMapping(subscriptionNameMapping)
 				.withLastSeenTimeout(Long.parseLong(
 						System.getenv("LAST_SEEN_TIMEOUT") != null ?
 								System.getenv("LAST_SEEN_TIMEOUT") :
@@ -76,7 +76,6 @@ public abstract class LambdaSubscriptionControl<U extends User> implements Reque
 				)
 				.build();
 
-		this.subscriptionNameMapping = subscriptionNameMapping;
 	}
 
 	@Override
