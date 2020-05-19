@@ -19,7 +19,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class GraphQLQuery {
 
-	private final String operationName;
+	private final String  operationName;
 	private final String query;
 	private final Map<String, Object> variables;
 

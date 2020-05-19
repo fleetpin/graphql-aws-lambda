@@ -4,4 +4,4 @@
 .idea/
 target/
 native-libs/
-*..iml
+*.iml
