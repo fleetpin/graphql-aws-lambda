@@ -1,5 +1,11 @@
 {
   "errors": [
-    "AccessDeniedError"
+    {
+      "message": "AccessDeniedError",
+      "locations": [],
+      "extensions": {
+        "classification": "ValidationError"
+      }
+    }
   ]
 }

@@ -1,9 +1,8 @@
 package com.fleetpin.graphql.aws.lambda;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyRequestEvent;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fleetpin.graphql.aws.lambda.admin.User;
+import com.fleetpin.graphql.aws.lambda.exceptions.AccessDeniedError;
 import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.UnaryOperator;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +33,7 @@ class LambdaGraphQLTest {
     private String token;
 
     @BeforeEach
+    @SuppressWarnings("unchecked") // No.
     void setUp() throws IOException {
         when(graphQL.executeAsync(any(UnaryOperator.class))).thenReturn(
                 CompletableFuture.completedFuture(ExecutionResultImpl.newExecutionResult().build())
@@ -64,7 +64,6 @@ class LambdaGraphQLTest {
         input.setBody(body);
         input.setHeaders(Map.of("Authorization", token));
         final var authorizedHandler = new AuthorizedGraphHandler(graphQL);
-        authorizedHandler.updateGraphQL();
 
         final var response = authorizedHandler.handleRequest(input, null);
 
@@ -82,7 +81,7 @@ class LambdaGraphQLTest {
 
         public UnauthorizedGraphHandler() throws Exception {
             noopGraphQLContext = new NoopGraphQLContext();
-            validateFuture = CompletableFuture.failedFuture(new RuntimeException("Bad token"));
+            validateFuture = CompletableFuture.failedFuture(new AccessDeniedError());
         }
 
         @Override
@@ -106,7 +105,8 @@ class LambdaGraphQLTest {
         private final CompletableFuture<User> validateFuture;
         private final GraphQL graphQL;
 
-        public AuthorizedGraphHandler(final GraphQL graphQL) throws Exception {
+        public AuthorizedGraphHandler(final GraphQL graphQL) {
+            super(graphQL);
             this.graphQL = graphQL;
             noopGraphQLContext = new NoopGraphQLContext();
             validateFuture = CompletableFuture.completedFuture(new User() {
