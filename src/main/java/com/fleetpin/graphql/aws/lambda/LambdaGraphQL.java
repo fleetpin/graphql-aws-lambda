@@ -31,10 +31,14 @@ import static com.google.common.net.HttpHeaders.AUTHORIZATION;
 
 public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements RequestHandler<APIGatewayV2ProxyRequestEvent,
         APIGatewayV2ProxyResponseEvent> {
-    private static final Logger LOGGER = LoggerFactory.getLogger(LambdaGraphQL.class);
+    private static final Logger logger = LoggerFactory.getLogger(LambdaGraphQL.class);
+    private static final Map<String, String> RESPONSE_HEADERS = Map.of(
+            "Access-Control-Allow-Origin", "*",
+            "content-type", "application/json; charset=utf-8"
+    );
 
-    private GraphQL build;
     private final ObjectMapper mapper;
+    private GraphQL build;
 
     public LambdaGraphQL() throws Exception {
         this.build = buildGraphQL();
@@ -44,7 +48,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
     @Override
     public APIGatewayV2ProxyResponseEvent handleRequest(
             final APIGatewayV2ProxyRequestEvent input,
-            final com.amazonaws.services.lambda.runtime.Context context
+            final com.amazonaws.services.lambda.runtime.Context context // Gets confused with ContextGraphQL otherwise
     ) {
         try {
             final var query = mapper.readValue(input.getBody(), GraphQLQuery.class);
@@ -52,40 +56,37 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
             final var user = validate(input.getHeaders().get(AUTHORIZATION)).get();
 
             final C graphContext = buildContext(user, query);
-            final var target = build.executeAsync(builder -> builder.query(query.getQuery())
+            final var queryResponse = build.executeAsync(builder -> builder.query(query.getQuery())
                     .operationName(query.getOperationName())
                     .variables(query.getVariables())
                     .context(graphContext));
-            graphContext.start(target);
+            graphContext.start(queryResponse);
+
+            final ObjectNode serializedQueryResponse = mapper.valueToTree(queryResponse.get());
+            if (serializedQueryResponse.get(Constants.GRAPHQL_ERRORS_FIELD).isEmpty()) {
+                serializedQueryResponse.remove(Constants.GRAPHQL_ERRORS_FIELD);
+            }
 
             final var response = new APIGatewayV2ProxyResponseEvent();
             response.setStatusCode(200);
-            response.setHeaders(Map.of(
-                    "Access-Control-Allow-Origin", "*",
-                    "content-type", "application/json; charset=utf-8"
-            ));
-            final ObjectNode tree = mapper.valueToTree(target.get());
-            if (tree.get(Constants.GRAPHQL_ERRORS_FIELD).isEmpty()) {
-                tree.remove(Constants.GRAPHQL_ERRORS_FIELD);
-            }
-
-            response.setBody(tree.toString());
+            response.setHeaders(RESPONSE_HEADERS);
+            response.setBody(serializedQueryResponse.toString());
 
             return response;
         } catch (final ExecutionException e) {
-            LOGGER.error("Failed to validate user", e);
+            logger.error("Failed to validate user", e);
 
             final var badResponse = new APIGatewayV2ProxyResponseEvent();
             badResponse.setStatusCode(200);
 
             final var response = new ObjectNode(JsonNodeFactory.instance);
-            response.putArray(Constants.GRAPHQL_ERRORS_FIELD).add("AccessDeniedError");
+            response.putArray(Constants.GRAPHQL_ERRORS_FIELD).add(Constants.GRAPHQL_ACCESS_DENIED);
 
             badResponse.setBody(response.toString());
 
             return badResponse;
         } catch (final Throwable e) {
-            LOGGER.error("Failed to invoke graph", e);
+            logger.error("Failed to invoke graph", e);
             throw new RuntimeException(e);
         } finally {
             LambdaCache.evict();

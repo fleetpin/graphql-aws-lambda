@@ -16,5 +16,6 @@ public class Constants {
     public static final String ENV_LAST_SEEN_TIMEOUT = "ENV_LAST_SEEN_TIMEOUT";
     public static final String ENV_SENT_MESSAGE_TIMEOUT = "ENV_SENT_MESSAGE_TIMEOUT";
 
+    public static final String GRAPHQL_ACCESS_DENIED = "AccessDeniedError";
     public static final String GRAPHQL_ERRORS_FIELD = "errors";
 }

@@ -8,7 +8,7 @@
 	<url>https://github.com/fleetpin/graphql-aws-lambda</url>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<junit.jupiter.version>5.6.0</junit.jupiter.version>
+		<junit.jupiter.version>5.4.2</junit.jupiter.version>
 	</properties>
 
 	<distributionManagement>
@@ -178,6 +178,19 @@
 			<artifactId>mockito-junit-jupiter</artifactId>
 			<version>3.3.0</version>
 			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<version>${junit.jupiter.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<version>${junit.jupiter.version}</version>
 		</dependency>
 
 		<dependency>

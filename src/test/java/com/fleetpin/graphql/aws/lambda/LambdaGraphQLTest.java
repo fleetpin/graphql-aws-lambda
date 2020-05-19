@@ -64,7 +64,8 @@ class LambdaGraphQLTest {
         final var response = authorizedHandler.handleRequest(input, null);
 
         assertEquals(200, response.getStatusCode());
-        assertFalse(response.getBody().contains("body"));
+        assertFalse(response.getBody().contains("errors"));
+        assertFalse(response.getBody().contains("AccessDeniedError"));
     }
 
     private static String readResourceAsString(final String resourcePath) throws IOException {
