@@ -84,7 +84,11 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
     		return manager.getDynamoDbAsyncClient().getItem(t -> t.tableName(subscriptionTable).key(key));
 		});
 
-		sentMessageTimeout = Long.parseLong(System.getenv(Constants.ENV_SENT_MESSAGE_TIMEOUT));
+		sentMessageTimeout = Long.parseLong(
+				System.getenv(Constants.ENV_SENT_MESSAGE_TIMEOUT) != null ?
+						System.getenv(Constants.ENV_SENT_MESSAGE_TIMEOUT) :
+						Duration.ofMinutes(2).toMillis() + ""
+		);
 		
 	}
 
