@@ -11,92 +11,104 @@
  */
 package com.fleetpin.graphql.aws.lambda;
 
-import static com.google.common.net.HttpHeaders.AUTHORIZATION;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyResponseEvent;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fleetpin.graphql.aws.lambda.exceptions.AccessDeniedError;
 import com.fleetpin.graphql.builder.SchemaBuilder;
-
+import com.google.common.annotations.VisibleForTesting;
 import graphql.ExecutionResult;
+import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements RequestHandler<APIGatewayV2ProxyRequestEvent, APIGatewayV2ProxyResponseEvent>{
-	
-	private static final Logger LOGGER = LoggerFactory.getLogger(LambdaGraphQL.class);
+import java.util.concurrent.CompletableFuture;
 
-	private final GraphQL build;
-	private ObjectMapper mapper;
+import static com.google.common.net.HttpHeaders.AUTHORIZATION;
 
-	public LambdaGraphQL() throws Exception {
-		this.build = buildGraphQL();
-		this.mapper = builderObjectMapper();
-	}
-	
-	
+public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements RequestHandler<APIGatewayV2ProxyRequestEvent,
+        APIGatewayV2ProxyResponseEvent> {
+    private static final Logger logger = LoggerFactory.getLogger(LambdaGraphQL.class);
+    private final ObjectMapper mapper;
+    private final GraphQL build;
 
-	@Override
-	public APIGatewayV2ProxyResponseEvent handleRequest(APIGatewayV2ProxyRequestEvent input, com.amazonaws.services.lambda.runtime.Context context) {
-		try {
-			GraphQLQuery query = mapper.readValue(input.getBody(), GraphQLQuery.class);
-			
-			var toReturn = new APIGatewayV2ProxyResponseEvent();
-			CompletableFuture<ExecutionResult> result =	validate(input.getHeaders().get(AUTHORIZATION)).handle((user, userError) -> {
-				if(userError != null) {
-					LOGGER.error("Failed to validate user", userError);
-					toReturn.setStatusCode(401);
-					return CompletableFuture.completedFuture((ExecutionResult) null);
-				}
+    public LambdaGraphQL() throws Exception {
+        this.build = buildGraphQL();
+        this.mapper = builderObjectMapper();
+    }
 
-				C graphContext = buildContext(user, query);
-				var target = build.executeAsync(builder -> builder.query(query.getQuery()).operationName(query.getOperationName()).variables(query.getVariables()).context(graphContext));
-				graphContext.start(target);
-				return target;
-			}).thenCompose(t -> t);
-			toReturn.setStatusCode(200);
-			var headers = new HashMap<String, String>();
-			headers.put("Access-Control-Allow-Origin", "*");
-			headers.put("content-type", "application/json; charset=utf-8");
-			toReturn.setHeaders(headers);
-			var r = result.get();
-			if(r != null) {
-				//remove empty array to match apollo
-				ObjectNode tree = mapper.valueToTree(r);
-				if(tree.get("errors").isEmpty()) {
-					tree.remove("errors");
-				}
-				toReturn.setBody(mapper.writeValueAsString(tree));
-			}else {
-				toReturn.setBody("");
-			}
-			return toReturn;
-		}catch (Throwable e) {
-			LOGGER.error("Failed to invoke graph", e);
-			e.printStackTrace();
-			throw new RuntimeException(e);
-		}finally {
-			LambdaCache.evict();
-		}
-	}
+    @VisibleForTesting
+    protected LambdaGraphQL(final GraphQL graphQL) {
+        build = graphQL;
+        mapper = builderObjectMapper();
+    }
 
-	protected ObjectMapper builderObjectMapper() {
-		return SchemaBuilder.MAPPER;
-	}
-	
-	protected abstract GraphQL buildGraphQL() throws Exception;
+    @Override
+    public APIGatewayV2ProxyResponseEvent handleRequest(
+            final APIGatewayV2ProxyRequestEvent input,
+            final com.amazonaws.services.lambda.runtime.Context context // Gets confused with ContextGraphQL otherwise
+    ) {
+        try {
+            final var query = mapper.readValue(input.getBody(), GraphQLQuery.class);
+            final var user = validate(input.getHeaders().get(AUTHORIZATION)).get();
+            final C graphContext = buildContext(user, query);
+            final var queryResponse = build.executeAsync(builder -> builder.query(query.getQuery())
+                    .operationName(query.getOperationName())
+                    .variables(query.getVariables())
+                    .context(graphContext));
+            graphContext.start(queryResponse);
 
-	protected abstract CompletableFuture<U> validate(String authHeader);
+            final ObjectNode serializedQueryResponse = mapper.valueToTree(queryResponse.get());
+            if (serializedQueryResponse.get(Constants.GRAPHQL_ERRORS_FIELD).isEmpty()) {
+                serializedQueryResponse.remove(Constants.GRAPHQL_ERRORS_FIELD);
+            }
 
-	protected abstract C buildContext(U user, GraphQLQuery query);
+            final var response = new APIGatewayV2ProxyResponseEvent();
+            response.setStatusCode(200);
+            response.setHeaders(Constants.GRAPHQL_RESPONSE_HEADERS);
+            response.setBody(serializedQueryResponse.toString());
 
+            return response;
+        } catch (final Exception e) {
+            final var error = e.getCause();
+            if (error instanceof AccessDeniedError) {
+                logger.error("Failed to validate user", e);
+
+                final var result = ExecutionResultImpl.newExecutionResult().addError((AccessDeniedError) error).build();
+
+                final var accessDeniedResponse = new APIGatewayV2ProxyResponseEvent();
+                accessDeniedResponse.setStatusCode(200);
+                accessDeniedResponse.setBody(executionResultSpecification(result));
+
+                return accessDeniedResponse;
+            } else {
+                logger.error("Failed to invoke graph", e);
+                throw new RuntimeException(e);
+            }
+        } finally {
+            LambdaCache.evict();
+        }
+    }
+
+    private String executionResultSpecification(final ExecutionResult result) {
+        try {
+            return mapper.writeValueAsString(result.toSpecification());
+        } catch (final JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    protected ObjectMapper builderObjectMapper() {
+        return SchemaBuilder.MAPPER;
+    }
+
+    protected abstract GraphQL buildGraphQL() throws Exception;
+
+    protected abstract CompletableFuture<U> validate(String authHeader);
+
+    protected abstract C buildContext(U user, GraphQLQuery query);
 }
-

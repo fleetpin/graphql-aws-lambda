@@ -1,6 +1,9 @@
 package com.fleetpin.graphql.aws.lambda;
 
+import java.util.Map;
+
 public class Constants {
+    private Constants() {}
 
     public static final String CONNECTION_ID = "connectionId";
     public static final String ID = "id";
@@ -15,4 +18,10 @@ public class Constants {
     public static final String ENV_LAST_SEEN_TIMEOUT = "ENV_LAST_SEEN_TIMEOUT";
     public static final String ENV_SENT_MESSAGE_TIMEOUT = "ENV_SENT_MESSAGE_TIMEOUT";
 
+    public static final String GRAPHQL_ACCESS_DENIED = "AccessDeniedError";
+    public static final String GRAPHQL_ERRORS_FIELD = "errors";
+    public static final Map<String, String> GRAPHQL_RESPONSE_HEADERS = Map.of(
+            "Access-Control-Allow-Origin", "*",
+            "content-type", "application/json; charset=utf-8"
+    );
 }
