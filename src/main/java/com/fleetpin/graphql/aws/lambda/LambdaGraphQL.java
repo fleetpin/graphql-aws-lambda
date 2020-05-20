@@ -82,6 +82,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
 
                 final var accessDeniedResponse = new APIGatewayV2ProxyResponseEvent();
                 accessDeniedResponse.setStatusCode(200);
+                accessDeniedResponse.setHeaders(Constants.GRAPHQL_RESPONSE_HEADERS);
                 accessDeniedResponse.setBody(executionResultSpecification(result));
 
                 return accessDeniedResponse;

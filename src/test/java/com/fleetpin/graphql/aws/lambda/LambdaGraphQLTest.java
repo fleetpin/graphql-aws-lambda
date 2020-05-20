@@ -33,7 +33,7 @@ class LambdaGraphQLTest {
     private String token;
 
     @BeforeEach
-    @SuppressWarnings("unchecked") // No.
+    @SuppressWarnings("unchecked")
     void setUp() throws IOException {
         when(graphQL.executeAsync(any(UnaryOperator.class))).thenReturn(
                 CompletableFuture.completedFuture(ExecutionResultImpl.newExecutionResult().build())
@@ -54,6 +54,7 @@ class LambdaGraphQLTest {
         final var response = unauthorizedHandler.handleRequest(input, null);
 
         assertEquals(200, response.getStatusCode());
+        assertEquals(2, response.getHeaders().size());
         JSONAssert.assertEquals(expectedBody, response.getBody(), true);
     }
 
@@ -68,6 +69,7 @@ class LambdaGraphQLTest {
         final var response = authorizedHandler.handleRequest(input, null);
 
         assertEquals(200, response.getStatusCode());
+        assertEquals(2, response.getHeaders().size());
         JSONAssert.assertEquals(expectedBody, response.getBody(), true);
     }
 
