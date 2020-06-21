@@ -20,9 +20,10 @@ import graphql.ExecutionResult;
 import graphql.GraphQL;
 import io.reactivex.rxjava3.core.Flowable;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.apigatewaymanagementapi.ApiGatewayManagementApiAsyncClient;
-import software.amazon.awssdk.services.apigatewaymanagementapi.model.GoneException;
 import software.amazon.awssdk.services.apigatewaymanagementapi.model.PostToConnectionResponse;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
@@ -37,6 +38,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E, Void> {
+
+    private static final Logger logger = LoggerFactory.getLogger(LambdaSubscriptionSource.class);
 
     private final DynamoDbManager manager;
     private final ApiGatewayManagementApiAsyncClient gatewayApi;
@@ -175,6 +178,8 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
                                             return sendMessage(connectionId, sendResponse)
                                                     .handle((response, error) -> {
                                                         if (error != null) {
+                                                            logger.error("Deleting user", error);
+
                                                             return deleteUser(user);
                                                         }
 
