@@ -175,12 +175,7 @@ public abstract class LambdaSubscriptionSource<E, T> implements RequestHandler<E
                                             return sendMessage(connectionId, sendResponse)
                                                     .handle((response, error) -> {
                                                         if (error != null) {
-                                                            if (error instanceof GoneException || error.getCause() instanceof GoneException) {
-                                                                //delete user info
-                                                                return deleteUser(user);
-                                                            } else {
-                                                                throw new RuntimeException(error);
-                                                            }
+                                                            return deleteUser(user);
                                                         }
 
                                                         return CompletableFuture.completedFuture(null);
