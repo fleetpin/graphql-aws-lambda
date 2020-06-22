@@ -2,7 +2,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.fleetpin</groupId>
     <artifactId>graphql-aws-lambda</artifactId>
-    <version>0.1.32-SNAPSHOT</version>
+    <version>0.1.32</version>
     <name>graphQL AWS Lambda</name>
     <description>library that allows you to use a lambda endpoint as a graphql API</description>
     <url>https://github.com/fleetpin/graphql-aws-lambda</url>
@@ -28,7 +28,7 @@
         <url>https://github.com/fleetpin/graphql-aws-lambda</url>
         <connection>scm:git:https://github.com/fleetpin/graphql-aws-lambda.git</connection>
         <developerConnection>scm:git:https://github.com/fleetpin/graphql-aws-lambda.git</developerConnection>
-        <tag>HEAD</tag>
+        <tag>graphql-aws-lambda-0.1.32</tag>
     </scm>
 
     <licenses>
