@@ -3,6 +3,8 @@ package com.fleetpin.graphql.aws.lambda;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyRequestEvent;
 import com.fleetpin.graphql.aws.lambda.admin.User;
 import com.fleetpin.graphql.aws.lambda.exceptions.AccessDeniedError;
+import com.google.common.io.ByteStreams;
+
 import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,7 +76,7 @@ class LambdaGraphQLTest {
     }
 
     private static String readResourceAsString(final String resourcePath) throws IOException {
-        return Files.readString(Path.of(ClassLoader.getSystemResource(resourcePath).getPath()));
+        return new String(ByteStreams.toByteArray(ClassLoader.getSystemResourceAsStream(resourcePath)));
     }
 
     private static class UnauthorizedGraphHandler extends LambdaGraphQL<User, NoopGraphQLContext> {
@@ -120,6 +122,11 @@ class LambdaGraphQLTest {
                 @Override
                 public AttributeValue getExtraUserInfo() {
                     return null;
+                }
+                
+                @Override
+                public String toString() {
+                	return "someuser";
                 }
             });
         }
