@@ -47,6 +47,10 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
         mapper = builderObjectMapper();
     }
 
+    public boolean enableAccessLog() {
+    	return false;
+    }
+    
     @Override
     public APIGatewayV2ProxyResponseEvent handleRequest(
             final APIGatewayV2ProxyRequestEvent input,
@@ -55,13 +59,16 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
         try {
             final var query = mapper.readValue(input.getBody(), GraphQLQuery.class);
             final var user = validate(input.getHeaders().get(AUTHORIZATION)).get();
+            if(enableAccessLog()) {
+            	logger.info("Executing query {}, for user {}", query.getOperationName(), user);
+            }
             final C graphContext = buildContext(user, query);
             final var queryResponse = build.executeAsync(builder -> builder.query(query.getQuery())
                     .operationName(query.getOperationName())
                     .variables(query.getVariables())
                     .context(graphContext));
             graphContext.start(queryResponse);
-
+            
             final ObjectNode serializedQueryResponse = mapper.valueToTree(queryResponse.get());
             if (serializedQueryResponse.get(Constants.GRAPHQL_ERRORS_FIELD).isEmpty()) {
                 serializedQueryResponse.remove(Constants.GRAPHQL_ERRORS_FIELD);
