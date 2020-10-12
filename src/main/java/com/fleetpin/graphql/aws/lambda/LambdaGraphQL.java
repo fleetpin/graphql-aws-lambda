@@ -20,6 +20,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fleetpin.graphql.aws.lambda.exceptions.AccessDeniedError;
 import com.fleetpin.graphql.builder.SchemaBuilder;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Throwables;
+
 import graphql.ExecutionResult;
 import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
@@ -50,7 +52,13 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
     public boolean enableAccessLog() {
     	return false;
     }
-    
+    /**
+     * if on a 500 want the API to show the content
+     * @return
+     */
+    public boolean showFailureCause() {
+    	return false;
+    }
     @Override
     public APIGatewayV2ProxyResponseEvent handleRequest(
             final APIGatewayV2ProxyRequestEvent input,
@@ -95,7 +103,16 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
                 return accessDeniedResponse;
             } else {
                 logger.error("Failed to invoke graph", e);
-                throw new RuntimeException(e);
+                final var requestFailedResponse = new APIGatewayV2ProxyResponseEvent();
+                requestFailedResponse.setStatusCode(500);
+                requestFailedResponse.setHeaders(Constants.GRAPHQL_RESPONSE_HEADERS);
+                //don't want to expose internal api 
+                if(showFailureCause()) {
+                	requestFailedResponse.setBody(Throwables.getStackTraceAsString(e));
+                }else {
+                	requestFailedResponse.setBody("Internal Server Error");
+                }
+                return requestFailedResponse;
             }
         } finally {
             LambdaCache.evict();
