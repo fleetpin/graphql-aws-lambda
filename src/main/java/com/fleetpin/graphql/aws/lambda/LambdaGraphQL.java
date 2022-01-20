@@ -150,9 +150,9 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
 
     private String gzipResult(ObjectNode result) throws JsonProcessingException {
         var data = mapper.writeValueAsBytes(result);
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        try(GZIPOutputStream out = new GZIPOutputStream(bos);) {
+        try(ByteArrayOutputStream bos = new ByteArrayOutputStream();GZIPOutputStream out = new GZIPOutputStream(bos)) {
             out.write(data);
+            out.finish();
             return Base64.encodeBase64String(bos.toByteArray());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
