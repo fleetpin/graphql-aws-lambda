@@ -22,6 +22,7 @@ import com.fleetpin.graphql.builder.SchemaBuilder;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 
+import com.google.common.collect.ImmutableMap;
 import graphql.ExecutionResult;
 import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
@@ -33,11 +34,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.zip.GZIPOutputStream;
 
-import static com.fleetpin.graphql.aws.lambda.Constants.GRAPHQL_GZIP_RESPONSE_HEADERS;
 import static com.google.common.net.HttpHeaders.*;
 
 public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements RequestHandler<APIGatewayV2ProxyRequestEvent,
@@ -101,7 +102,8 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
             var body = serializedQueryResponse.toString();
             if (gzipBody(input.getHeaders())) {
                 response.setIsBase64Encoded(true);
-                responseHeader = GRAPHQL_GZIP_RESPONSE_HEADERS;
+                responseHeader = new HashMap(responseHeader);
+                responseHeader.put(CONTENT_ENCODING, "gzip");
                 body = gzipResult(serializedQueryResponse);
             }
 

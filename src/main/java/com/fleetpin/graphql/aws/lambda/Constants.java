@@ -26,9 +26,4 @@ public class Constants {
             ACCESS_CONTROL_ALLOW_ORIGIN, "*",
             CONTENT_TYPE, "application/json; charset=utf-8"
     );
-    public static final Map<String, String> GRAPHQL_GZIP_RESPONSE_HEADERS = Map.of(
-            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
-            CONTENT_TYPE, "application/json; charset=utf-8",
-            CONTENT_ENCODING, "gzip"
-    );
 }
