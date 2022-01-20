@@ -149,8 +149,11 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
         if (acceptEncodingHeader == null) {
             return false;
         }
-        final String[] split = acceptEncodingHeader.trim().split("\\s*,\\s*");
-        return Arrays.asList(split).stream().anyMatch(x -> x.equalsIgnoreCase("gzip"));
+
+        return Arrays
+                .stream(acceptEncodingHeader.trim().split("\\s*,\\s*"))
+                .anyMatch(x -> x.equalsIgnoreCase("gzip"));
+
     }
 
 

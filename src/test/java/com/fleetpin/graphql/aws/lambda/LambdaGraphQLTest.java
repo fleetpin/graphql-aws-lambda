@@ -12,6 +12,8 @@ import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.skyscreamer.jsonassert.JSONAssert;
@@ -85,13 +87,14 @@ class LambdaGraphQLTest {
         JSONAssert.assertEquals(expectedBody, response.getBody(), true);
     }
 
-    @Test
-    void gzippedResponse() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"gzip", "deflate, gzip", "gzip, compress, br"})
+    void gzippedResponse(String acceptEncodingHeader) throws Exception {
         final var expectedBody = readResourceAsString("simple_graphql_response.json");
         final var input = new APIGatewayV2ProxyRequestEvent();
         input.setBody(body);
-        input.setHeaders(Map.of("Authorization", token, "Accept-Encoding", "gzip"));
-        final var randomGraphHandler = new RandomGraphHandler(graphQL);
+        input.setHeaders(Map.of("Authorization", token, "Accept-Encoding", acceptEncodingHeader));
+        final var randomGraphHandler = new GZipEnabledGraphQLHander(graphQL);
 
         final var response = randomGraphHandler.handleRequest(input, null);
 
@@ -114,12 +117,12 @@ class LambdaGraphQLTest {
         return new String(ByteStreams.toByteArray(ClassLoader.getSystemResourceAsStream(resourcePath)));
     }
 
-    private static class RandomGraphHandler extends LambdaGraphQL<User, NoopGraphQLContext> {
+    private static class GZipEnabledGraphQLHander extends LambdaGraphQL<User, NoopGraphQLContext> {
         private final NoopGraphQLContext noopGraphQLContext;
         private final CompletableFuture<User> validateFuture;
         private final GraphQL graphQL;
 
-        public RandomGraphHandler(final GraphQL graphQL) {
+        public GZipEnabledGraphQLHander(final GraphQL graphQL) {
             super(graphQL);
             this.graphQL = graphQL;
             noopGraphQLContext = new NoopGraphQLContext();
