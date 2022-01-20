@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.zip.GZIPOutputStream;
@@ -87,7 +88,6 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
                     .context(graphContext));
             graphContext.start(queryResponse);
 
-
             final ObjectNode serializedQueryResponse = mapper.valueToTree(queryResponse.get());
             if (serializedQueryResponse.get(Constants.GRAPHQL_ERRORS_FIELD).isEmpty()) {
                 serializedQueryResponse.remove(Constants.GRAPHQL_ERRORS_FIELD);
@@ -95,13 +95,17 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
 
             final var response = new APIGatewayV2ProxyResponseEvent();
             response.setStatusCode(200);
-            response.setHeaders(Constants.GRAPHQL_RESPONSE_HEADERS);
-            
+
+            var responseHeader = Constants.GRAPHQL_RESPONSE_HEADERS;
+
             var body = serializedQueryResponse.toString();
             if (gzipBody(input.getHeaders())) {
-                body = gzipResult(serializedQueryResponse);
                 response.setIsBase64Encoded(true);
+                responseHeader = Constants.GRAPHQL_GZIP_RESPONSE_HEADERS;
+                body = gzipResult(serializedQueryResponse);
             }
+
+            response.setHeaders(responseHeader);
             response.setBody(body);
 
             return response;
@@ -137,22 +141,24 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
     }
 
     private Boolean gzipBody(Map<String, String> headers) {
-        return headers.get(ACCEPT_ENCODING) == "gzip" && enableGzipCompression();
+        var acceptEncodingHeader = headers.get(ACCEPT_ENCODING);
+        if (acceptEncodingHeader == null) return false;
+        final String[] split = acceptEncodingHeader.trim().split("\\s*,\\s*");
+        return Arrays.asList(split).stream().anyMatch(x -> x.equalsIgnoreCase("gzip")) && enableGzipCompression();
     }
 
 
-    private String gzipResult(ObjectNode result) {
-        try {
-            var data = mapper.writeValueAsBytes(result);
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            GZIPOutputStream out = new GZIPOutputStream(bos);
+    private String gzipResult(ObjectNode result) throws JsonProcessingException {
+        var data = mapper.writeValueAsBytes(result);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try(GZIPOutputStream out = new GZIPOutputStream(bos);) {
             out.write(data);
-            out.close();
             return Base64.encodeBase64String(bos.toByteArray());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
+
     private String executionResultSpecification(final ExecutionResult result) {
         try {
             return mapper.writeValueAsString(result.toSpecification());
