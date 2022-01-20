@@ -141,10 +141,14 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
     }
 
     private Boolean gzipBody(Map<String, String> headers) {
+        if (!enableGzipCompression()) {
+            return false;
+        }
+
         var acceptEncodingHeader = headers.get(ACCEPT_ENCODING);
         if (acceptEncodingHeader == null) return false;
         final String[] split = acceptEncodingHeader.trim().split("\\s*,\\s*");
-        return Arrays.asList(split).stream().anyMatch(x -> x.equalsIgnoreCase("gzip")) && enableGzipCompression();
+        return Arrays.asList(split).stream().anyMatch(x -> x.equalsIgnoreCase("gzip"));
     }
 
 
