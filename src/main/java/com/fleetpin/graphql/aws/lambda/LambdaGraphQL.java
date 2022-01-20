@@ -37,8 +37,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.zip.GZIPOutputStream;
 
-import static com.google.common.net.HttpHeaders.ACCEPT_ENCODING;
-import static com.google.common.net.HttpHeaders.AUTHORIZATION;
+import static com.fleetpin.graphql.aws.lambda.Constants.GRAPHQL_GZIP_RESPONSE_HEADERS;
+import static com.google.common.net.HttpHeaders.*;
 
 public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements RequestHandler<APIGatewayV2ProxyRequestEvent,
         APIGatewayV2ProxyResponseEvent> {
@@ -101,7 +101,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
             var body = serializedQueryResponse.toString();
             if (gzipBody(input.getHeaders())) {
                 response.setIsBase64Encoded(true);
-                responseHeader = Constants.GRAPHQL_GZIP_RESPONSE_HEADERS;
+                responseHeader = GRAPHQL_GZIP_RESPONSE_HEADERS;
                 body = gzipResult(serializedQueryResponse);
             }
 

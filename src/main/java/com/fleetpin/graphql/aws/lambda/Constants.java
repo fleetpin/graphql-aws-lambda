@@ -2,6 +2,8 @@ package com.fleetpin.graphql.aws.lambda;
 
 import java.util.Map;
 
+import static com.google.common.net.HttpHeaders.*;
+
 public class Constants {
     private Constants() {}
 
@@ -21,11 +23,12 @@ public class Constants {
     public static final String GRAPHQL_ACCESS_DENIED = "AccessDeniedError";
     public static final String GRAPHQL_ERRORS_FIELD = "errors";
     public static final Map<String, String> GRAPHQL_RESPONSE_HEADERS = Map.of(
-            "Access-Control-Allow-Origin", "*",
-            "content-type", "application/json; charset=utf-8"
+            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+            CONTENT_TYPE, "application/json; charset=utf-8"
     );
     public static final Map<String, String> GRAPHQL_GZIP_RESPONSE_HEADERS = Map.of(
-            "Access-Control-Allow-Origin", "*",
-            "content-type", "gzip; charset=utf-8"
+            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+            CONTENT_TYPE, "application/json; charset=utf-8",
+            CONTENT_ENCODING, "gzip"
     );
 }

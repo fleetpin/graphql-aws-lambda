@@ -30,6 +30,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.function.UnaryOperator;
 import java.util.zip.GZIPInputStream;
 
+import static com.google.common.net.HttpHeaders.CONTENT_ENCODING;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -95,8 +96,8 @@ class LambdaGraphQLTest {
         final var response = randomGraphHandler.handleRequest(input, null);
 
         assertEquals(200, response.getStatusCode());
-        assertEquals(2, response.getHeaders().size());
-        assertTrue(response.getHeaders().get("content-type").compareToIgnoreCase("gzip; charset=utf-8") == 0);
+        assertEquals(3, response.getHeaders().size());
+        assertTrue(response.getHeaders().get(CONTENT_ENCODING).compareToIgnoreCase("gzip") == 0);
 
         var responseBodyGzipped = Base64.decodeBase64(response.getBody());
 
