@@ -22,15 +22,24 @@ import com.fleetpin.graphql.builder.SchemaBuilder;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 
+import com.google.common.collect.ImmutableMap;
 import graphql.ExecutionResult;
 import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
+import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.zip.GZIPOutputStream;
 
-import static com.google.common.net.HttpHeaders.AUTHORIZATION;
+import static com.google.common.net.HttpHeaders.*;
 
 public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements RequestHandler<APIGatewayV2ProxyRequestEvent,
         APIGatewayV2ProxyResponseEvent> {
@@ -48,6 +57,9 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
         build = graphQL;
         mapper = builderObjectMapper();
     }
+
+    public boolean enableGzipCompression() { return false; }
+
 
     public boolean enableAccessLog() {
     	return false;
@@ -76,7 +88,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
                     .variables(query.getVariables())
                     .context(graphContext));
             graphContext.start(queryResponse);
-            
+
             final ObjectNode serializedQueryResponse = mapper.valueToTree(queryResponse.get());
             if (serializedQueryResponse.get(Constants.GRAPHQL_ERRORS_FIELD).isEmpty()) {
                 serializedQueryResponse.remove(Constants.GRAPHQL_ERRORS_FIELD);
@@ -84,8 +96,19 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
 
             final var response = new APIGatewayV2ProxyResponseEvent();
             response.setStatusCode(200);
-            response.setHeaders(Constants.GRAPHQL_RESPONSE_HEADERS);
-            response.setBody(serializedQueryResponse.toString());
+
+            var responseHeader = Constants.GRAPHQL_RESPONSE_HEADERS;
+
+            var body = serializedQueryResponse.toString();
+            if (gzipBody(input.getHeaders())) {
+                response.setIsBase64Encoded(true);
+                responseHeader = new HashMap(responseHeader);
+                responseHeader.put(CONTENT_ENCODING, "gzip");
+                body = gzipResult(serializedQueryResponse);
+            }
+
+            response.setHeaders(responseHeader);
+            response.setBody(body);
 
             return response;
         } catch (final Exception e) {
@@ -116,6 +139,34 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
             }
         } finally {
             LambdaCache.evict();
+        }
+    }
+
+    private Boolean gzipBody(Map<String, String> headers) {
+        if (!enableGzipCompression()) {
+            return false;
+        }
+
+        var acceptEncodingHeader = headers.get(ACCEPT_ENCODING);
+        if (acceptEncodingHeader == null) {
+            return false;
+        }
+
+        return Arrays
+                .stream(acceptEncodingHeader.trim().split("\\s*,\\s*"))
+                .anyMatch(x -> x.equalsIgnoreCase("gzip"));
+
+    }
+
+
+    private String gzipResult(ObjectNode result) throws JsonProcessingException {
+        var data = mapper.writeValueAsBytes(result);
+        try(ByteArrayOutputStream bos = new ByteArrayOutputStream();GZIPOutputStream out = new GZIPOutputStream(bos)) {
+            out.write(data);
+            out.finish();
+            return Base64.encodeBase64String(bos.toByteArray());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
