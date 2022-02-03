@@ -147,13 +147,19 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
             return false;
         }
 
-        var acceptEncodingHeader = headers.get(ACCEPT_ENCODING);
+        var acceptEncodingHeader = headers
+                .entrySet()
+                .stream()
+                .filter(header -> header.getKey().equalsIgnoreCase((ACCEPT_ENCODING)))
+                .findAny()
+                .orElse(null);
+
         if (acceptEncodingHeader == null) {
             return false;
         }
 
         return Arrays
-                .stream(acceptEncodingHeader.trim().split("\\s*,\\s*"))
+                .stream(acceptEncodingHeader.getValue().trim().split("\\s*,\\s*"))
                 .anyMatch(x -> x.equalsIgnoreCase("gzip"));
 
     }

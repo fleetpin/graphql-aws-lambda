@@ -8,11 +8,12 @@ import com.google.common.io.ByteStreams;
 import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,19 +22,16 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 
 import static com.google.common.net.HttpHeaders.CONTENT_ENCODING;
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -88,12 +86,12 @@ class LambdaGraphQLTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"gzip", "deflate, gzip", "gzip, compress, br"})
-    void gzippedResponse(String acceptEncodingHeader) throws Exception {
+    @MethodSource("acceptEncodingHeader")
+    void gzippedResponse(String acceptEncodingHeaderName, String acceptEncodingHeaderValue) throws Exception {
         final var expectedBody = readResourceAsString("simple_graphql_response.json");
         final var input = new APIGatewayV2ProxyRequestEvent();
         input.setBody(body);
-        input.setHeaders(Map.of("Authorization", token, "Accept-Encoding", acceptEncodingHeader));
+        input.setHeaders(Map.of("Authorization", token, acceptEncodingHeaderName, acceptEncodingHeaderValue));
         final var randomGraphHandler = new GZipEnabledGraphQLHander(graphQL);
 
         final var response = randomGraphHandler.handleRequest(input, null);
@@ -111,6 +109,15 @@ class LambdaGraphQLTest {
             throw new UncheckedIOException("Error while decompression!", e);
         }
 
+    }
+
+    private static Stream<Arguments> acceptEncodingHeader() {
+        return Stream.of(
+            Arguments.of("accept-encoding", "gzip"),
+            Arguments.of("Accept-Encoding", "gzip"),
+            Arguments.of("Accept-Encoding", "deflate, gzip"),
+            Arguments.of("Accept-Encoding", "gzip, compress, br")
+        );
     }
 
     private static String readResourceAsString(final String resourcePath) throws IOException {
