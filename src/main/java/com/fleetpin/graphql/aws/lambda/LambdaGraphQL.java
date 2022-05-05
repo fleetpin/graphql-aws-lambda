@@ -22,7 +22,6 @@ import com.fleetpin.graphql.builder.SchemaBuilder;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 
-import com.google.common.collect.ImmutableMap;
 import graphql.ExecutionResult;
 import graphql.ExecutionResultImpl;
 import graphql.GraphQL;
@@ -133,7 +132,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
                 if(showFailureCause()) {
                 	requestFailedResponse.setBody(Throwables.getStackTraceAsString(e));
                 }else {
-                	requestFailedResponse.setBody("Internal Server Error");
+                	requestFailedResponse.setBody("{ \"error\": \"Internal Server Error\" }");
                 }
                 return requestFailedResponse;
             }

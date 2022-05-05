@@ -7,7 +7,7 @@ import graphql.language.SourceLocation;
 
 import java.util.List;
 
-public class AccessDeniedError extends Exception implements GraphQLError {
+public class AccessDeniedError extends RuntimeException implements GraphQLError {
     private static final String DEFAULT_MESSAGE = AccessDeniedError.class.getSimpleName();
     private final String message;
 
