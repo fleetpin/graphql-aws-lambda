@@ -18,7 +18,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fleetpin.graphql.aws.lambda.exceptions.AccessDeniedError;
-import com.fleetpin.graphql.builder.SchemaBuilder;
+import com.fleetpin.graphql.aws.lambda.util.InputMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 
@@ -184,7 +184,7 @@ public abstract class LambdaGraphQL<U, C extends ContextGraphQL> implements Requ
     }
 
     protected ObjectMapper builderObjectMapper() {
-        return SchemaBuilder.MAPPER;
+        return InputMapper.MAPPER;
     }
 
     protected abstract GraphQL buildGraphQL() throws Exception;
